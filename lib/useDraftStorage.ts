@@ -1,7 +1,13 @@
 "use client";
 
 import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
-import { defaultDraft, type CustomNode, type Example, type PromptDraft } from "./types";
+import {
+  defaultDraft,
+  type CustomNode,
+  type DocumentEntry,
+  type Example,
+  type PromptDraft,
+} from "./types";
 
 const STORAGE_KEY = "betterprompter:draft";
 
@@ -14,6 +20,17 @@ function asString(value: unknown): string {
 
 function asRecord(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
+}
+
+function asStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.map(asString) : [];
+}
+
+function asStringMap(value: unknown): Record<string, string> {
+  const entries = Object.entries(asRecord(value)).filter(
+    (entry): entry is [string, string] => typeof entry[1] === "string",
+  );
+  return Object.fromEntries(entries);
 }
 
 function normalizeNodes(value: unknown, depth: number, path: string): CustomNode[] {
@@ -32,33 +49,59 @@ function normalizeNodes(value: unknown, depth: number, path: string): CustomNode
   });
 }
 
+function normalizeDocuments(value: unknown): DocumentEntry[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((item, index) => {
+    const entry = asRecord(item);
+    return {
+      id: typeof entry.id === "string" && entry.id ? entry.id : `document-${index}`,
+      source: asString(entry.source),
+      content: asString(entry.content),
+      collapsed: entry.collapsed === true,
+    };
+  });
+}
+
+function normalizeExamples(value: unknown): Example[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((item, index) => {
+    const entry = asRecord(item);
+    return {
+      id: typeof entry.id === "string" && entry.id ? entry.id : `restored-${index}`,
+      input: asString(entry.input),
+      thinking: asString(entry.thinking),
+      idealOutput: asString(entry.idealOutput),
+      collapsed: entry.collapsed === true,
+      // kind を持たない旧データは良い例として扱う。
+      kind: entry.kind === "negative" ? "negative" : "positive",
+    };
+  });
+}
+
 /**
  * 外から来た JSON（localStorage / インポートファイル）を PromptDraft に整える。
  * 形が違えば null を返し、呼び出し側は既定値のまま続行する。
+ * 新しいキーを持たない古い下書きも、既定値で埋めてそのまま読めるようにしてある。
  */
 export function normalizeDraft(value: unknown): PromptDraft | null {
   if (typeof value !== "object" || value === null) return null;
   const raw = value as Record<string, unknown>;
 
-  const examples: Example[] = Array.isArray(raw.examples)
-    ? raw.examples.map((item, index) => {
-        const entry = asRecord(item);
-        return {
-          id: typeof entry.id === "string" && entry.id ? entry.id : `restored-${index}`,
-          input: asString(entry.input),
-          thinking: asString(entry.thinking),
-          idealOutput: asString(entry.idealOutput),
-          collapsed: entry.collapsed === true,
-        };
-      })
-    : [];
+  const examples = normalizeExamples(raw.examples);
 
   return {
+    role: asString(raw.role),
     instruction: asString(raw.instruction),
+    chainOfThought: raw.chainOfThought === true,
+    constraints: asStringArray(raw.constraints),
+    documents: normalizeDocuments(raw.documents),
+    longContextMode: raw.longContextMode === true,
     // Example が0件だと追加ボタンしかない空画面になるため、必ず1件は残す。
     examples: examples.length > 0 ? examples : defaultDraft().examples,
     customSections: normalizeNodes(raw.customSections, 0, "section"),
     includeRealInput: raw.includeRealInput !== false,
+    prefill: asString(raw.prefill),
+    variableValues: asStringMap(raw.variableValues),
   };
 }
 

@@ -1,14 +1,27 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import AutoTextarea from "@/components/AutoTextarea";
+import ConstraintList from "@/components/ConstraintList";
 import CustomNodeEditor from "@/components/CustomNodeEditor";
+import DocumentCard from "@/components/DocumentCard";
 import ExampleCard from "@/components/ExampleCard";
+import LintPanel from "@/components/LintPanel";
 import OutputPanel from "@/components/OutputPanel";
-import { buildPrompt } from "@/lib/buildPrompt";
+import VariablePanel from "@/components/VariablePanel";
+import { buildPrompt, type BuiltPrompt } from "@/lib/buildPrompt";
+import { lintDraft } from "@/lib/lint";
 import { appendChild, moveNode, patchNode, removeNode } from "@/lib/tree";
-import { emptyExample, emptyNode, type CustomNode, type Example } from "@/lib/types";
+import {
+  emptyDocument,
+  emptyExample,
+  emptyNode,
+  type CustomNode,
+  type DocumentEntry,
+  type Example,
+} from "@/lib/types";
 import { normalizeDraft, useDraftStorage } from "@/lib/useDraftStorage";
+import { applyVariables, extractVariables } from "@/lib/variables";
 
 function newId(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -17,11 +30,38 @@ function newId(): string {
   return `node-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+/** 配列の要素を隣と入れ替える。範囲外なら元の配列をそのまま返す。 */
+function swap<T>(items: T[], index: number, direction: -1 | 1): T[] {
+  const target = index + direction;
+  if (index < 0 || target < 0 || target >= items.length) return items;
+  const next = [...items];
+  [next[index], next[target]] = [next[target], next[index]];
+  return next;
+}
+
 export default function Page() {
   const [draft, setDraft] = useDraftStorage();
+  // プレビューは表示モードなので下書きには保存しない。
+  const [previewEnabled, setPreviewEnabled] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const prompt = useMemo(() => buildPrompt(draft), [draft]);
+  const variables = useMemo(() => extractVariables(draft), [draft]);
+  const findings = useMemo(() => lintDraft(draft), [draft]);
+
+  const built = useMemo<BuiltPrompt>(() => {
+    const raw = buildPrompt(draft);
+    if (!previewEnabled) return raw;
+    const values = draft.variableValues;
+    return {
+      system: applyVariables(raw.system, values),
+      user: applyVariables(raw.user, values),
+      prefill: applyVariables(raw.prefill, values),
+      blocks: raw.blocks.map((block) => ({
+        ...block,
+        text: applyVariables(block.text, values),
+      })),
+    };
+  }, [draft, previewEnabled]);
 
   function updateExample(id: string, patch: Partial<Example>) {
     setDraft((current) => ({
@@ -51,14 +91,48 @@ export default function Page() {
   }
 
   function moveExample(id: string, direction: -1 | 1) {
-    setDraft((current) => {
-      const index = current.examples.findIndex((example) => example.id === id);
-      const target = index + direction;
-      if (index < 0 || target < 0 || target >= current.examples.length) return current;
-      const examples = [...current.examples];
-      [examples[index], examples[target]] = [examples[target], examples[index]];
-      return { ...current, examples };
-    });
+    setDraft((current) => ({
+      ...current,
+      examples: swap(
+        current.examples,
+        current.examples.findIndex((example) => example.id === id),
+        direction,
+      ),
+    }));
+  }
+
+  function updateDocument(id: string, patch: Partial<DocumentEntry>) {
+    setDraft((current) => ({
+      ...current,
+      documents: current.documents.map((document) =>
+        document.id === id ? { ...document, ...patch } : document,
+      ),
+    }));
+  }
+
+  function addDocument() {
+    setDraft((current) => ({
+      ...current,
+      documents: [...current.documents, emptyDocument(newId())],
+    }));
+  }
+
+  function deleteDocument(id: string) {
+    setDraft((current) => ({
+      ...current,
+      documents: current.documents.filter((document) => document.id !== id),
+    }));
+  }
+
+  function moveDocument(id: string, direction: -1 | 1) {
+    setDraft((current) => ({
+      ...current,
+      documents: swap(
+        current.documents,
+        current.documents.findIndex((document) => document.id === id),
+        direction,
+      ),
+    }));
   }
 
   function updateNode(id: string, patch: Partial<CustomNode>) {
@@ -149,6 +223,14 @@ export default function Page() {
       </header>
 
       <AutoTextarea
+        label="Role / System"
+        value={draft.role}
+        rows={2}
+        placeholder="モデルに与える役割（例: あなたは経験豊富な編集者です）"
+        onChange={(role) => setDraft((current) => ({ ...current, role }))}
+      />
+
+      <AutoTextarea
         label="Instruction"
         value={draft.instruction}
         rows={3}
@@ -156,8 +238,66 @@ export default function Page() {
         onChange={(instruction) => setDraft((current) => ({ ...current, instruction }))}
       />
 
+      <label className="toggle">
+        <input
+          type="checkbox"
+          checked={draft.chainOfThought}
+          onChange={(event) =>
+            setDraft((current) => ({ ...current, chainOfThought: event.target.checked }))
+          }
+        />
+        Chain-of-Thought — <code>&lt;thinking&gt;</code> で考えてから{" "}
+        <code>&lt;answer&gt;</code> で答えるよう指示する
+      </label>
+
+      <div className="section-head">
+        <h2 className="section-label">constraints</h2>
+        <span className="section-note">守ってほしい条件を箇条書きで</span>
+      </div>
+      <ConstraintList
+        constraints={draft.constraints}
+        onChange={(constraints) => setDraft((current) => ({ ...current, constraints }))}
+      />
+
+      <div className="section-head">
+        <h2 className="section-label">documents</h2>
+        <span className="section-note">長文資料。プロンプトの先頭に置かれます</span>
+      </div>
+
+      {draft.documents.length > 0 && (
+        <div className="document-list">
+          {draft.documents.map((document, index) => (
+            <DocumentCard
+              key={document.id}
+              document={document}
+              index={index}
+              total={draft.documents.length}
+              onChange={(patch) => updateDocument(document.id, patch)}
+              onDelete={() => deleteDocument(document.id)}
+              onMove={(direction) => moveDocument(document.id, direction)}
+            />
+          ))}
+        </div>
+      )}
+
+      <button type="button" className="add-example" onClick={addDocument}>
+        ＋ add document
+      </button>
+
+      <label className="toggle">
+        <input
+          type="checkbox"
+          checked={draft.longContextMode}
+          onChange={(event) =>
+            setDraft((current) => ({ ...current, longContextMode: event.target.checked }))
+          }
+        />
+        long-context モード — 資料が長いとき、指示を example の後ろ（末尾寄り）へ移す
+      </label>
+
       <div className="section-head">
         <h2 className="section-label">example</h2>
+        <span className="section-note">良い例と悪い例を切り替えられます</span>
       </div>
 
       <div className="example-list">
@@ -216,7 +356,38 @@ export default function Page() {
         末尾に実入力の枠（<code>{"{{INPUT}}"}</code>）を付ける
       </label>
 
-      <OutputPanel prompt={prompt} />
+      {variables.length > 0 && (
+        <>
+          <div className="section-head">
+            <h2 className="section-label">variables</h2>
+            <span className="section-note">{`{{名前}} と書くとここに現れます`}</span>
+          </div>
+          <VariablePanel
+            variables={variables}
+            values={draft.variableValues}
+            previewEnabled={previewEnabled}
+            onTogglePreview={setPreviewEnabled}
+            onChangeValue={(name, value) =>
+              setDraft((current) => ({
+                ...current,
+                variableValues: { ...current.variableValues, [name]: value },
+              }))
+            }
+          />
+        </>
+      )}
+
+      <AutoTextarea
+        label="Assistant prefill"
+        value={draft.prefill}
+        rows={2}
+        placeholder="応答の書き出しを固定する（例: <analysis>）"
+        onChange={(prefill) => setDraft((current) => ({ ...current, prefill }))}
+      />
+
+      <LintPanel findings={findings} />
+
+      <OutputPanel built={built} />
     </main>
   );
 }

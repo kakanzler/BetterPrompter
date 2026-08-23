@@ -483,3 +483,337 @@ textarea::placeholder {
     max-width: 14ch;
   }
 }
+
+/* ---------- 良い例 / 悪い例 ---------- */
+
+.example-card-negative {
+  /* 悪い例だと一目で分かるよう、左端に色をつける。 */
+  box-shadow: inset 4px 0 0 var(--danger);
+}
+
+.kind-switch {
+  display: inline-flex;
+  gap: 2px;
+  background: rgba(0, 0, 0, 0.22);
+  border-radius: 6px;
+  padding: 2px;
+}
+
+.kind-option {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  padding: 3px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.kind-option:hover {
+  color: var(--text);
+}
+
+.kind-option-on {
+  background: rgba(255, 255, 255, 0.2);
+  color: var(--text);
+}
+
+/* ---------- 制約リスト ---------- */
+
+.constraint-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.constraint-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bullet {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  width: 1ch;
+}
+
+.constraint-input,
+.source-input,
+.variable-input {
+  flex: 1;
+  min-width: 0;
+  background: var(--input-bg);
+  color: var(--input-fg);
+  border: none;
+  border-radius: var(--radius-input);
+  padding: 9px 14px;
+  font-family: var(--font-ui);
+  font-size: 0.9rem;
+}
+
+.constraint-input::placeholder,
+.source-input::placeholder,
+.variable-input::placeholder {
+  color: #8d8d8d;
+}
+
+/* ---------- documents ---------- */
+
+.document-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.document-card {
+  background: var(--card);
+  border-radius: var(--radius-card);
+  padding: 14px 24px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.document-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.document-card-actions {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.document-card .source-input {
+  flex: 1 1 200px;
+  padding: 5px 10px;
+  font-size: 0.82rem;
+  border-radius: 6px;
+}
+
+/* ---------- variables ---------- */
+
+.variable-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--card);
+  border-radius: var(--radius-card);
+  padding: 16px 24px 18px;
+}
+
+.variable-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.variable-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.variable-name {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--text);
+  min-width: 14ch;
+}
+
+.variable-panel .variable-input {
+  padding: 6px 12px;
+  font-size: 0.85rem;
+  border-radius: 6px;
+}
+
+.variable-note {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--muted);
+  opacity: 0.75;
+}
+
+/* ---------- Lint ---------- */
+
+.lint-panel {
+  background: var(--card);
+  border-radius: var(--radius-card);
+  padding: 12px 20px;
+}
+
+.lint-panel > summary {
+  cursor: pointer;
+  font-size: 0.95rem;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.lint-summary {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.lint-clear {
+  margin: 10px 0 2px;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.lint-list {
+  list-style: none;
+  margin: 12px 0 2px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lint-item {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.lint-badge {
+  flex: none;
+  font-size: 0.68rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+  margin-top: 2px;
+}
+
+.lint-warn .lint-badge {
+  background: rgba(255, 154, 139, 0.22);
+  color: var(--danger);
+}
+
+.lint-info .lint-badge {
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--muted);
+}
+
+.lint-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.lint-body strong {
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.lint-hint {
+  font-size: 0.76rem;
+  color: var(--muted);
+  opacity: 0.85;
+}
+
+/* ---------- 3分割された出力 ---------- */
+
+.turns {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.turn {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.turn-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.turn-name {
+  font-size: 0.82rem;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.turn-name-system {
+  background: rgba(138, 180, 248, 0.25);
+}
+
+.turn-name-assistant {
+  background: rgba(160, 220, 170, 0.22);
+}
+
+.turn-caption {
+  font-size: 0.72rem;
+  color: var(--muted);
+  opacity: 0.8;
+}
+
+.turn-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+
+/* ---------- トークン内訳 ---------- */
+
+.breakdown {
+  background: var(--card);
+  border-radius: var(--radius-card);
+  padding: 12px 20px;
+}
+
+.breakdown > summary {
+  cursor: pointer;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.breakdown ul {
+  list-style: none;
+  margin: 10px 0 2px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.breakdown li {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.breakdown code {
+  font-family: var(--font-mono);
+}
+
+.breakdown li span {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 600px) {
+  .document-card,
+  .variable-panel {
+    padding: 12px 16px 18px;
+    border-radius: 18px;
+  }
+
+  .variable-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+  }
+}

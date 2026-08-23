@@ -1,7 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { buildPrompt, countText, estimateTokens, hasTagCollision, sanitizeTag } from "./buildPrompt";
-import { defaultDraft, emptyExample } from "./types";
+import {
+  buildPrompt as buildFull,
+  countText,
+  estimateTokens,
+  flattenPrompt,
+  hasTagCollision,
+  sanitizeTag,
+} from "./buildPrompt";
+import { defaultDraft, emptyDocument, emptyExample } from "./types";
 import type { CustomNode, PromptDraft } from "./types";
+
+// 既存テストは user ターンだけを見ているので、薄いラッパで包む。
+function buildPrompt(input: PromptDraft): string {
+  return buildFull(input).user;
+}
 
 function draft(overrides: Partial<PromptDraft> = {}): PromptDraft {
   return { ...defaultDraft(), includeRealInput: false, ...overrides };
@@ -228,5 +240,198 @@ describe("countText の英語判定", () => {
 
   it("1語のときも数える", () => {
     expect(countText("BetterPrompter").words).toBe(1);
+  });
+});
+
+describe("Role / prefill（3分割出力）", () => {
+  it("Role が空なら system は空文字列", () => {
+    expect(buildFull(draft()).system).toBe("");
+  });
+
+  it("Role は素のテキストで system に入る（タグで包まない）", () => {
+    const built = buildFull(draft({ role: "  あなたは経験豊富な編集者です。  " }));
+    expect(built.system).toBe("あなたは経験豊富な編集者です。");
+    expect(built.user).not.toContain("role");
+  });
+
+  it("prefill の末尾空白は落とす", () => {
+    expect(buildFull(draft({ prefill: "<analysis>\n  " })).prefill).toBe("<analysis>");
+  });
+
+  it("prefill の先頭は保つ", () => {
+    expect(buildFull(draft({ prefill: "  <analysis>" })).prefill).toBe("  <analysis>");
+  });
+
+  it("flattenPrompt は中身のあるターンだけ並べる", () => {
+    const built = buildFull(draft({ role: "編集者", instruction: "要約する", prefill: "<a>" }));
+    expect(flattenPrompt(built)).toBe(
+      "[system]\n編集者\n\n[user]\n<instructions>\n要約する\n</instructions>\n\n[assistant]\n<a>",
+    );
+  });
+
+  it("Role だけなら user は空のまま", () => {
+    const built = buildFull(draft({ role: "編集者" }));
+    expect(built.user).toBe("");
+    expect(flattenPrompt(built)).toBe("[system]\n編集者");
+  });
+});
+
+describe("Chain-of-Thought トグル", () => {
+  it("ON で thinking_instructions が入る", () => {
+    const result = buildPrompt(draft({ instruction: "要約する", chainOfThought: true }));
+    expect(result).toContain("<thinking_instructions>");
+    expect(result.indexOf("<instructions>")).toBeLessThan(result.indexOf("<thinking_instructions>"));
+  });
+
+  it("OFF なら出ない", () => {
+    expect(buildPrompt(draft({ instruction: "要約する" }))).not.toContain("thinking_instructions");
+  });
+});
+
+describe("制約リスト", () => {
+  it("箇条書きで constraints に入る", () => {
+    expect(buildPrompt(draft({ constraints: ["200字以内", "敬体で書く"] }))).toBe(
+      "<constraints>\n- 200字以内\n- 敬体で書く\n</constraints>",
+    );
+  });
+
+  it("空文字列と空白だけの項目は落とす", () => {
+    expect(buildPrompt(draft({ constraints: ["", "  ", "200字以内"] }))).toBe(
+      "<constraints>\n- 200字以内\n</constraints>",
+    );
+  });
+
+  it("有効な項目が0件なら constraints ごと出ない", () => {
+    expect(buildPrompt(draft({ constraints: ["", "   "] }))).toBe("");
+  });
+});
+
+describe("ネガティブ例", () => {
+  const bad = { ...emptyExample("b"), kind: "negative" as const, input: "入力", thinking: "冗長", idealOutput: "だめな出力" };
+
+  it("negative_examples 側に振り分け、タグ名を読み替える", () => {
+    const result = buildPrompt(draft({ examples: [bad] }));
+    expect(result).toBe(
+      "<negative_examples>\n<negative_example>\n<input>\n入力\n</input>\n" +
+        "<why_wrong>\n冗長\n</why_wrong>\n<bad_output>\nだめな出力\n</bad_output>\n" +
+        "</negative_example>\n</negative_examples>",
+    );
+  });
+
+  it("良い例と悪い例を別ブロックに分け、良い例を先に置く", () => {
+    const good = { ...emptyExample("g"), input: "良い入力" };
+    const result = buildPrompt(draft({ examples: [bad, good] }));
+    expect(result.indexOf("<examples>")).toBeLessThan(result.indexOf("<negative_examples>"));
+    expect(result.match(/<example>/g)).toHaveLength(1);
+    expect(result.match(/<negative_example>/g)).toHaveLength(1);
+  });
+
+  it("kind 未指定は良い例として扱う（旧データ互換）", () => {
+    const legacy = { id: "l", input: "入力", thinking: "", idealOutput: "" };
+    expect(buildPrompt(draft({ examples: [legacy] }))).toContain("<examples>");
+  });
+
+  it("3項目すべて空の悪い例は落ちる", () => {
+    expect(buildPrompt(draft({ examples: [{ ...emptyExample("b"), kind: "negative" }] }))).toBe("");
+  });
+});
+
+describe("長文ドキュメント", () => {
+  const doc = (source: string, content: string, id = source || content) => ({
+    ...emptyDocument(id),
+    source,
+    content,
+  });
+
+  it("index は1始まりで採番する", () => {
+    const result = buildPrompt(draft({ documents: [doc("a.md", "本文A"), doc("b.md", "本文B")] }));
+    expect(result).toContain('<document index="1">');
+    expect(result).toContain('<document index="2">');
+  });
+
+  it("source が空なら source 行ごと省く", () => {
+    expect(buildPrompt(draft({ documents: [doc("", "本文")] }))).toBe(
+      '<documents>\n<document index="1">\n<document_content>\n本文\n</document_content>\n</document>\n</documents>',
+    );
+  });
+
+  it("本文が空のドキュメントは飛ばし、index を詰める", () => {
+    const result = buildPrompt(draft({ documents: [doc("a.md", "", "a"), doc("b.md", "本文B")] }));
+    expect(result).toContain('<document index="1">');
+    expect(result).not.toContain('index="2"');
+    expect(result).not.toContain("a.md");
+  });
+
+  it("ドキュメントは instructions より前に置く", () => {
+    const result = buildPrompt(draft({ instruction: "要約する", documents: [doc("a.md", "本文")] }));
+    expect(result.indexOf("<documents>")).toBeLessThan(result.indexOf("<instructions>"));
+  });
+
+  it("有効なドキュメントが0件なら documents ごと出ない", () => {
+    expect(buildPrompt(draft({ documents: [doc("a.md", "", "a")] }))).toBe("");
+  });
+});
+
+describe("long-context モード", () => {
+  const base = {
+    instruction: "要約する",
+    chainOfThought: true,
+    constraints: ["200字以内"],
+    examples: [{ ...emptyExample("g"), input: "本文" }],
+    documents: [{ ...emptyDocument("d"), source: "a.md", content: "資料" }],
+  };
+
+  it("OFF なら instructions は examples より前", () => {
+    const result = buildPrompt(draft(base));
+    expect(result.indexOf("<instructions>")).toBeLessThan(result.indexOf("<examples>"));
+  });
+
+  it("ON で指示まわり3ブロックがまとめて examples の後ろへ動く", () => {
+    const result = buildPrompt(draft({ ...base, longContextMode: true }));
+    const examples = result.indexOf("<examples>");
+    expect(examples).toBeLessThan(result.indexOf("<instructions>"));
+    expect(examples).toBeLessThan(result.indexOf("<thinking_instructions>"));
+    expect(examples).toBeLessThan(result.indexOf("<constraints>"));
+  });
+
+  it("ON でもドキュメントは先頭のまま", () => {
+    const result = buildPrompt(draft({ ...base, longContextMode: true }));
+    expect(result.indexOf("<documents>")).toBe(0);
+  });
+
+  it("ON でも実入力の枠は最後", () => {
+    const result = buildPrompt(draft({ ...base, longContextMode: true, includeRealInput: true }));
+    expect(result.endsWith("<input>\n{{INPUT}}\n</input>")).toBe(true);
+  });
+});
+
+describe("blocks（トークン内訳の材料）", () => {
+  it("出力した順にラベル付きで並ぶ", () => {
+    const built = buildFull(
+      draft({
+        instruction: "要約する",
+        constraints: ["200字以内"],
+        examples: [{ ...emptyExample("g"), input: "本文" }],
+        includeRealInput: true,
+      }),
+    );
+    expect(built.blocks.map((b) => b.label)).toEqual([
+      "<instructions>",
+      "<constraints>",
+      "<examples>",
+      "<input>",
+    ]);
+  });
+
+  it("blocks を連結すると user と一致する", () => {
+    const built = buildFull(draft({ instruction: "要約する", constraints: ["短く"] }));
+    expect(built.blocks.map((b) => b.text).join("\n\n")).toBe(built.user);
+  });
+
+  it("カスタムタグはタグ名がラベルになる", () => {
+    const built = buildFull(
+      draft({ customSections: [{ id: "c", tag: "output format", content: "箇条書き", children: [] }] }),
+    );
+    expect(built.blocks[0].label).toBe("<output_format>");
   });
 });
