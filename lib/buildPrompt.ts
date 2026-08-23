@@ -244,9 +244,27 @@ export function flattenPrompt(built: BuiltPrompt): string {
   return parts.join("\n\n");
 }
 
-/** 本文に閉じタグが混ざっていて生成結果の構造が壊れるかどうか。 */
-export function hasTagCollision(text: string): boolean {
-  return CLOSING_TAGS.some((tag) => text.includes(tag));
+/**
+ * 本文に閉じタグが混ざっていて生成結果の構造が壊れるかどうか。
+ * extraTags にはユーザーが作ったカスタムタグ名を渡す（`context` → `</context>` を検出）。
+ */
+export function hasTagCollision(text: string, extraTags: string[] = []): boolean {
+  if (CLOSING_TAGS.some((tag) => text.includes(tag))) return true;
+  return extraTags.some((tag) => tag && text.includes(`</${tag}>`));
+}
+
+/** 下書きの中で実際に出力されるカスタムタグ名を集める（入れ子も含む）。 */
+export function customTagNames(nodes: CustomNode[]): string[] {
+  const names: string[] = [];
+  const walk = (list: CustomNode[]) => {
+    for (const node of list) {
+      const tag = sanitizeTag(node.tag);
+      if (tag) names.push(tag);
+      walk(node.children);
+    }
+  };
+  walk(nodes);
+  return [...new Set(names)];
 }
 
 /** ひらがな・カタカナ・漢字・半角カナ。 */

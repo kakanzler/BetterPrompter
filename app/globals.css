@@ -16,7 +16,7 @@
   --input-fg: #e6eaf4;
   --output-bg: hsl(var(--hue2) 26% 4% / 0.5);
   --output-fg: #dfe5f2;
-  --placeholder: hsl(var(--hue2) 12% 48%);
+  --placeholder: hsl(var(--hue2) 14% 56%);
 
   /* 縁と光。参照デザインのシアン〜バイオレット。 */
   --edge: hsl(var(--hue1) 35% 60% / 0.28);
@@ -1365,4 +1365,84 @@ textarea:focus,
   .section-card {
     padding: 10px 14px 14px;
   }
+}
+
+/* ---------- 自動で出るカード（並べ替え・削除なし） ---------- */
+
+.section-card-static {
+  border-style: dashed;
+}
+
+.section-card-static .section-card-head {
+  gap: 10px;
+}
+
+/* ---------- トースト ---------- */
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  transform: translateX(-50%);
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(560px, calc(100vw - 32px));
+  padding: 12px 14px 12px 18px;
+  border-radius: 999px;
+  border: 1px solid var(--edge);
+  background:
+    linear-gradient(235deg, hsl(var(--hue1) 50% 10% / 0.8), hsl(var(--hue1) 50% 10% / 0) 40%),
+    linear-gradient(hsl(220 20% 5% / 0.72));
+  backdrop-filter: blur(12px);
+  box-shadow:
+    0 10px 16px -8px rgb(3 3 8),
+    0 20px 36px -14px rgb(5 7 15);
+  animation: toast-in 0.18s var(--ease);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 10px);
+  }
+}
+
+.toast .shine,
+.toast .glow {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+.toast .shine {
+  padding: 1px;
+  background: linear-gradient(180deg, hsl(var(--hue1) 100% 80% / 0.8), transparent 45%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0.7;
+}
+
+.toast .glow {
+  inset: -10px;
+  background: linear-gradient(180deg, hsl(var(--hue1) 100% 60% / 0.45), transparent 45%);
+  filter: blur(14px) saturate(1.25) brightness(0.6);
+}
+
+.toast-message {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  font-size: 0.85rem;
+  color: var(--text);
+}
+
+.toast .text-button,
+.toast .icon-button {
+  position: relative;
+  flex: none;
 }

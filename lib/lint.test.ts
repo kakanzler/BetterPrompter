@@ -2,10 +2,29 @@ import { describe, expect, it } from "vitest";
 import { lintDraft } from "./lint";
 import { emptyExample } from "./types";
 import { defaultDraft } from "./sections";
-import type { PromptDraft } from "./types";
+import type { PromptDraft, Section } from "./types";
+
+/** 既存テストは「全カードがある」前提で書かれているので、既定でひととおり並べる。 */
+const ALL_KINDS = [
+  "role",
+  "instruction",
+  "constraints",
+  "documents",
+  "examples",
+  "outputSchema",
+] as const;
 
 function draft(overrides: Partial<PromptDraft> = {}): PromptDraft {
-  return { ...defaultDraft(), ...overrides };
+  const base = { ...defaultDraft(), ...overrides };
+  if (overrides.sections) return base;
+  return {
+    ...base,
+    sections: [
+      ...ALL_KINDS.map((kind) => ({ id: kind, kind }) as Section),
+      // カスタムタグはカードが無いと走査対象にならないので、対になるカードを足す。
+      ...base.customSections.map((node) => ({ id: node.id, kind: "custom" }) as Section),
+    ],
+  };
 }
 
 function ids(overrides: Partial<PromptDraft> = {}): string[] {
@@ -200,5 +219,51 @@ describe("出しすぎない Lint", () => {
       expect(found).not.toContain("thinking-without-cot");
       expect(found).not.toContain("long-context-off");
     }
+  });
+});
+
+describe("カードを消した項目は助言しない", () => {
+  const filled = {
+    instruction: "記事を3行で要約してください。",
+    constraints: ["200字以内"],
+    examples: [
+      { ...emptyExample("a"), input: "本文A", idealOutput: "要約A" },
+      { ...emptyExample("b"), input: "本文B", idealOutput: "要約B" },
+      { ...emptyExample("c"), input: "本文C", idealOutput: "要約C" },
+    ],
+  };
+
+  it("example カードを消したら「example がありません」に変わる", () => {
+    const withCard = ids({
+      ...filled,
+      sections: [
+        { id: "instruction", kind: "instruction" },
+        { id: "examples", kind: "examples" },
+        { id: "constraints", kind: "constraints" },
+      ],
+    });
+    expect(withCard).not.toContain("no-examples");
+
+    const withoutCard = ids({
+      ...filled,
+      sections: [
+        { id: "instruction", kind: "instruction" },
+        { id: "constraints", kind: "constraints" },
+      ],
+    });
+    expect(withoutCard).toContain("no-examples");
+  });
+
+  it("消した example の中の変数は指摘しない", () => {
+    const found = ids({
+      instruction: "要約する",
+      examples: [{ ...emptyExample("a"), input: "{{TOPIC}}", idealOutput: "要約" }],
+      sections: [{ id: "instruction", kind: "instruction" }],
+    });
+    expect(found).not.toContain("unset-variable");
+  });
+
+  it("カードが全部無ければ白紙として黙る", () => {
+    expect(ids({ ...filled, sections: [] })).toEqual([]);
   });
 });

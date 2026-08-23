@@ -152,7 +152,7 @@ function migrateSections(raw: Record<string, unknown>, nodes: CustomNode[]): Sec
   return sections;
 }
 
-export type NormalizeResult = {
+type NormalizeResult = {
   draft: PromptDraft;
   /**
    * 撤去した Assistant prefill に中身があった場合だけ入る。

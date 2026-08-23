@@ -2,10 +2,29 @@ import { describe, expect, it } from "vitest";
 import { applyVariables, extractVariables } from "./variables";
 import { emptyDocument, emptyExample } from "./types";
 import { defaultDraft } from "./sections";
-import type { PromptDraft } from "./types";
+import type { PromptDraft, Section } from "./types";
+
+/** 既存テストは「全カードがある」前提で書かれているので、既定でひととおり並べる。 */
+const ALL_KINDS = [
+  "role",
+  "instruction",
+  "constraints",
+  "documents",
+  "examples",
+  "outputSchema",
+] as const;
 
 function draft(overrides: Partial<PromptDraft> = {}): PromptDraft {
-  return { ...defaultDraft(), sections: [], ...overrides };
+  const base = { ...defaultDraft(), ...overrides };
+  if (overrides.sections) return base;
+  return {
+    ...base,
+    sections: [
+      ...ALL_KINDS.map((kind) => ({ id: kind, kind }) as Section),
+      // カスタムタグはカードが無いと走査対象にならないので、対になるカードを足す。
+      ...base.customSections.map((node) => ({ id: node.id, kind: "custom" }) as Section),
+    ],
+  };
 }
 
 describe("extractVariables", () => {
@@ -82,5 +101,47 @@ describe("applyVariables", () => {
 
   it("変数が無ければそのまま返す", () => {
     expect(applyVariables("ただの文章", { A: "あ" })).toBe("ただの文章");
+  });
+});
+
+describe("カードを消した項目は拾わない", () => {
+  const base = {
+    instruction: "{{TOPIC}} について書く",
+    examples: [{ ...emptyExample("e"), input: "{{FROM_EXAMPLE}}" }],
+    constraints: ["{{LIMIT}}字以内"],
+  };
+
+  it("カードがあるうちは拾う", () => {
+    const found = extractVariables(
+      draft({
+        ...base,
+        sections: [
+          { id: "instruction", kind: "instruction" },
+          { id: "examples", kind: "examples" },
+          { id: "constraints", kind: "constraints" },
+        ],
+      }),
+    );
+    expect(found).toEqual(["TOPIC", "LIMIT", "FROM_EXAMPLE"]);
+  });
+
+  it("カードを消せばデータが残っていても拾わない", () => {
+    const found = extractVariables(
+      draft({ ...base, sections: [{ id: "instruction", kind: "instruction" }] }),
+    );
+    expect(found).toEqual(["TOPIC"]);
+  });
+
+  it("カードの無いカスタムタグは拾わない", () => {
+    const found = extractVariables(
+      draft({
+        customSections: [
+          { id: "a", tag: "context", content: "{{SHOWN}}", children: [] },
+          { id: "b", tag: "hidden", content: "{{GONE}}", children: [] },
+        ],
+        sections: [{ id: "a", kind: "custom" }],
+      }),
+    );
+    expect(found).toEqual(["SHOWN"]);
   });
 });

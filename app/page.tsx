@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import AutoTextarea from "@/components/AutoTextarea";
 import ConstraintList from "@/components/ConstraintList";
+import { CollisionTagsProvider } from "@/components/CollisionTags";
 import ContextMenu, { type MenuPosition } from "@/components/ContextMenu";
 import CustomNodeEditor from "@/components/CustomNodeEditor";
 import DocumentCard from "@/components/DocumentCard";
@@ -12,8 +13,9 @@ import MigrationNotice from "@/components/MigrationNotice";
 import OutputPanel from "@/components/OutputPanel";
 import OutputSchemaEditor from "@/components/OutputSchemaEditor";
 import SectionCard from "@/components/SectionCard";
+import Toast, { type ToastState } from "@/components/Toast";
 import VariablePanel from "@/components/VariablePanel";
-import { buildPrompt, sanitizeTag, type BuiltPrompt } from "@/lib/buildPrompt";
+import { buildPrompt, customTagNames, sanitizeTag, type BuiltPrompt } from "@/lib/buildPrompt";
 import { lintDraft } from "@/lib/lint";
 import { buildOutputConfig } from "@/lib/outputConfig";
 import { applyRecommended, canAdd, makeSection, RECOMMENDED_ORDER, specFor } from "@/lib/sections";
@@ -64,11 +66,13 @@ export default function Page() {
   const [menu, setMenu] = useState<MenuPosition | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastState | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const variables = useMemo(() => extractVariables(draft), [draft]);
   const findings = useMemo(() => lintDraft(draft), [draft]);
   const outputConfig = useMemo(() => buildOutputConfig(draft), [draft]);
+  const collisionTags = useMemo(() => customTagNames(draft.customSections), [draft.customSections]);
 
   const raw = useMemo(() => buildPrompt(draft), [draft]);
   const hasOutput = Boolean(raw.system || raw.user || outputConfig);
@@ -136,16 +140,21 @@ export default function Page() {
   }
 
   function deleteSection(section: Section) {
+    // 消す前の状態を控えておき、どの種類のカードでも同じように取り消せるようにする。
+    const snapshot = draft;
+    const label = section.kind === "custom" ? (titleFor(section) ?? "custom tag") : specFor(section.kind).label;
+
     setDraft((current) => ({
       ...current,
       sections: current.sections.filter((entry) => entry.id !== section.id),
-      // custom カードは対応するノードも一緒に消す。他の種類はデータを残し、
-      // 同じカードを足し直したときに書いた内容が戻るようにする。
+      // custom はカードとノードが1対1なので、残すと辿れないゴミになる。一緒に消す。
       customSections:
         section.kind === "custom"
           ? removeNode(current.customSections, section.id)
           : current.customSections,
     }));
+
+    setToast({ message: `${label} を削除しました`, onUndo: () => setDraft(snapshot) });
   }
 
   function addSection(kind: SectionKind) {
@@ -208,9 +217,9 @@ export default function Page() {
     try {
       const restored = normalizeDraft(JSON.parse(await file.text()));
       if (restored) setDraft(restored.draft);
-      else window.alert("この JSON は BetterPrompter の形式ではありません。");
+      else setToast({ message: "この JSON は BetterPrompter の形式ではありません。" });
     } catch {
-      window.alert("JSON を読み込めませんでした。");
+      setToast({ message: "JSON を読み込めませんでした。" });
     }
   }
 
@@ -390,6 +399,7 @@ export default function Page() {
   );
 
   return (
+    <CollisionTagsProvider value={collisionTags}>
     <main className="page">
       <header className="page-head">
         <h1 className="app-title">BetterPrompter</h1>
@@ -466,7 +476,14 @@ export default function Page() {
           )}
 
           {hasOutput && variables.length > 0 && (
-            <VariablePanel
+            <section className="section-card section-card-static" aria-label="variables">
+              <header className="section-card-head">
+                <span className="section-card-title">variables</span>
+                <span className="section-card-note">
+                  本文から自動で拾います（並べ替え・削除はありません）
+                </span>
+              </header>
+              <VariablePanel
               variables={variables}
               values={draft.variableValues}
               previewEnabled={previewEnabled}
@@ -476,8 +493,9 @@ export default function Page() {
                   ...current,
                   variableValues: { ...current.variableValues, [name]: value },
                 }))
-              }
-            />
+                }
+              />
+            </section>
           )}
         </div>
 
@@ -486,6 +504,8 @@ export default function Page() {
           {hasOutput && <LintPanel findings={findings} />}
         </aside>
       </div>
+
+      {toast && <Toast toast={toast} onClose={() => setToast(null)} />}
 
       {menu && (
         <ContextMenu
@@ -498,5 +518,6 @@ export default function Page() {
         />
       )}
     </main>
+    </CollisionTagsProvider>
   );
 }

@@ -61,7 +61,23 @@ export default function ContextMenu({
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+
+      // 上下キーで項目を辿れるようにする（Tab だけだと検索欄から抜けにくい）。
+      const items = [...(ref.current?.querySelectorAll<HTMLButtonElement>(".neon-item") ?? [])]
+        .filter((item) => !item.disabled);
+      if (items.length === 0) return;
+      event.preventDefault();
+
+      const current = items.indexOf(document.activeElement as HTMLButtonElement);
+      const step = event.key === "ArrowDown" ? 1 : -1;
+      // 検索欄にいるときは端から入る。端まで来たら反対側へ回り込む。
+      const next = current < 0 ? (step === 1 ? 0 : items.length - 1) : (current + step + items.length) % items.length;
+      items[next].focus();
     };
     const onPointerDown = (event: MouseEvent) => {
       if (!ref.current?.contains(event.target as Node)) onClose();

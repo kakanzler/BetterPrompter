@@ -165,3 +165,15 @@ export function applyRecommended(sections: Section[]): Section[] {
 
   return next;
 }
+
+/** その種類のカードが今あるか。助言や変数の走査を出力と揃えるために使う。 */
+export function hasSection(sections: Section[], kind: SectionKind): boolean {
+  return sections.some((section) => section.kind === kind);
+}
+
+/** カードが残っているカスタムタグのノードだけを返す。 */
+export function activeCustomIds(sections: Section[]): Set<string> {
+  return new Set(
+    sections.filter((section) => section.kind === "custom").map((section) => section.id),
+  );
+}

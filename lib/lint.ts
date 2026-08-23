@@ -1,4 +1,5 @@
 import { sanitizeTag } from "./buildPrompt";
+import { activeCustomIds, hasSection } from "./sections";
 import { parseSchema } from "./outputConfig";
 import { extractVariables } from "./variables";
 import type { Example, PromptDraft } from "./types";
@@ -31,15 +32,35 @@ function isFilled(example: Example): boolean {
  */
 /** まだ何も書いていない下書きか。ここで真なら助言する相手がいない。 */
 function isBlank(draft: PromptDraft): boolean {
+  const v = visible(draft);
   return (
-    !draft.role.trim() &&
-    !draft.instruction.trim() &&
-    !draft.outputSchema.trim() &&
-    !draft.constraints.some((item) => item.trim()) &&
-    !draft.documents.some((doc) => doc.source.trim() || doc.content.trim()) &&
-    !draft.examples.some(isFilled) &&
-    draft.customSections.length === 0
+    !v.role.trim() &&
+    !v.instruction.trim() &&
+    !v.outputSchema.trim() &&
+    !v.constraints.some((item) => item.trim()) &&
+    !v.documents.some((doc) => doc.source.trim() || doc.content.trim()) &&
+    !v.examples.some(isFilled) &&
+    v.customSections.length === 0
   );
+}
+
+/**
+ * 今あるカードの中身だけを取り出す。
+ * カードを消した項目は出力に出ないので、助言の対象からも外す
+ * （消したはずの example の変数を指摘する、といった食い違いを防ぐ）。
+ */
+function visible(draft: PromptDraft) {
+  const has = (kind: Parameters<typeof hasSection>[1]) => hasSection(draft.sections, kind);
+  const active = activeCustomIds(draft.sections);
+  return {
+    role: has("role") ? draft.role : "",
+    instruction: has("instruction") ? draft.instruction : "",
+    outputSchema: has("outputSchema") ? draft.outputSchema : "",
+    constraints: has("constraints") ? draft.constraints : [],
+    documents: has("documents") ? draft.documents : [],
+    examples: has("examples") ? draft.examples : [],
+    customSections: draft.customSections.filter((node) => active.has(node.id)),
+  };
 }
 
 export function lintDraft(draft: PromptDraft): LintFinding[] {
@@ -47,15 +68,16 @@ export function lintDraft(draft: PromptDraft): LintFinding[] {
   if (isBlank(draft)) return [];
 
   const findings: LintFinding[] = [];
+  const v = visible(draft);
 
-  if (!draft.instruction.trim()) {
+  if (!v.instruction.trim()) {
     findings.push({
       id: "no-instruction",
       severity: "warn",
       message: "Instruction が空です",
       hint: "何をしてほしいかを最初に書くのが、いちばん効果の大きい一手です。",
     });
-  } else if (draft.instruction.trim().length < VAGUE_INSTRUCTION_CHARS) {
+  } else if (v.instruction.trim().length < VAGUE_INSTRUCTION_CHARS) {
     findings.push({
       id: "vague-instruction",
       severity: "info",
@@ -64,11 +86,11 @@ export function lintDraft(draft: PromptDraft): LintFinding[] {
     });
   }
 
-  const filled = draft.examples.filter(isFilled);
+  const filled = v.examples.filter(isFilled);
   const positives = filled.filter((example) => (example.kind ?? "positive") === "positive");
 
   // 指示すら固まっていない段階で example を急かしても仕方がない。
-  if (positives.length === 0 && draft.instruction.trim()) {
+  if (positives.length === 0 && v.instruction.trim()) {
     findings.push({
       id: "no-examples",
       severity: "info",
@@ -84,11 +106,11 @@ export function lintDraft(draft: PromptDraft): LintFinding[] {
     });
   }
 
-  const hasConstraints = draft.constraints.some((item) => item.trim());
-  const hasFormatTag = draft.customSections.some((section) =>
+  const hasConstraints = v.constraints.some((item) => item.trim());
+  const hasFormatTag = v.customSections.some((section) =>
     FORMAT_TAGS.includes(sanitizeTag(section.tag).toLowerCase()),
   );
-  const schema = parseSchema(draft.outputSchema);
+  const schema = parseSchema(v.outputSchema);
   if (schema.status === "error") {
     findings.push({
       id: "invalid-output-schema",
@@ -109,7 +131,7 @@ export function lintDraft(draft: PromptDraft): LintFinding[] {
 
   const seen = new Set<string>();
   const duplicated = new Set<string>();
-  for (const section of draft.customSections) {
+  for (const section of v.customSections) {
     const tag = sanitizeTag(section.tag);
     if (!tag) continue;
     if (seen.has(tag)) duplicated.add(tag);

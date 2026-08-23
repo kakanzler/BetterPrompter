@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useLayoutEffect, useMemo, useRef } from "react";
 import { countText, hasTagCollision } from "@/lib/buildPrompt";
+import { useCollisionTags } from "./CollisionTags";
 
 type Props = {
   label?: string;
@@ -43,7 +44,7 @@ export default function AutoTextarea({
     return () => window.removeEventListener("resize", resize);
   }, []);
 
-  const collision = hasTagCollision(value);
+  const collision = hasTagCollision(value, useCollisionTags());
   const { chars, words } = useMemo(() => countText(value), [value]);
 
   return (
