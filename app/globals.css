@@ -1,28 +1,37 @@
 :root {
-  --bg: #3d3d3d;
-  --card: #6b6b6b;
-  --card-hover: #797979;
-  --input-bg: #ececec;
-  --input-fg: #1a1a1a;
-  --text: #ffffff;
-  --muted: #cfcfcf;
-  --output-bg: #ffffff;
-  --output-fg: #1a1a1a;
-  --placeholder: #c9c9c9;
-  --focus: #8ab4f8;
-  --warn: #ffd479;
-  --danger: #ff9a8b;
-
-  --radius-input: 10px;
-  --radius-card: 24px;
-
-  /* Neon Glass の色味（CodePen の --hue1 / --hue2 に相当） */
+  /* Neon Glass の色味。すべての面をこの2色相から作る。 */
   --hue1: 255;
   --hue2: 222;
   --radius: 22px;
   --ease: cubic-bezier(0.5, 1, 0.89, 1);
-  --font-ui: "Segoe UI", "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN",
-    "Yu Gothic UI", Meiryo, sans-serif;
+
+  --bg: #0f1117;
+  --text: #e6eaf4;
+  --muted: #8e97ad;
+
+  /* 面はすべて黒の半透明。背後のグラデーションを透かす。 */
+  --card: hsl(var(--hue2) 22% 7% / 0.5);
+  --card-hover: hsl(var(--hue2) 22% 11% / 0.62);
+  --input-bg: hsl(var(--hue2) 26% 5% / 0.55);
+  --input-fg: #e6eaf4;
+  --output-bg: hsl(var(--hue2) 26% 4% / 0.5);
+  --output-fg: #dfe5f2;
+  --placeholder: hsl(var(--hue2) 12% 48%);
+
+  /* 縁と光。参照デザインのシアン〜バイオレット。 */
+  --edge: hsl(var(--hue1) 35% 60% / 0.28);
+  --edge-strong: hsl(var(--hue1) 90% 70% / 0.55);
+  --accent: hsl(198 95% 62%);
+  --accent-soft: hsl(198 95% 62% / 0.28);
+  --focus: hsl(198 95% 62%);
+  --warn: hsl(38 95% 68%);
+  --danger: hsl(6 90% 72%);
+
+  --radius-input: 12px;
+  --radius-card: 24px;
+
+  --font-ui: var(--font-sawarabi), "Hiragino Kaku Gothic ProN", "Yu Gothic UI", Meiryo,
+    system-ui, sans-serif;
   --font-mono: "Cascadia Code", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
 }
 
@@ -150,23 +159,54 @@ body {
   font-family: var(--font-mono);
 }
 
+textarea,
+.constraint-input,
+.source-input,
+.variable-input,
+.tag-input,
+.effort-select {
+  background:
+    linear-gradient(hsl(0 0% 100% / 0.06), hsl(0 0% 100% / 0) 42%),
+    var(--input-bg);
+  color: var(--input-fg);
+  border: 1px solid var(--edge);
+  border-radius: var(--radius-input);
+  font-family: var(--font-ui);
+  transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease);
+}
+
 textarea {
   width: 100%;
   min-height: 56px;
   resize: none;
   overflow: hidden;
-  background: var(--input-bg);
-  color: var(--input-fg);
-  border: none;
-  border-radius: var(--radius-input);
   padding: 12px 16px;
-  font-family: var(--font-ui);
   font-size: 0.95rem;
   line-height: 1.6;
 }
 
-textarea::placeholder {
-  color: #8d8d8d;
+textarea::placeholder,
+.constraint-input::placeholder,
+.source-input::placeholder,
+.variable-input::placeholder,
+.tag-input::placeholder,
+.schema-input::placeholder {
+  color: var(--placeholder);
+}
+
+/* フォーカスは参照デザインどおり、縁がシアンに灯る。 */
+textarea:focus,
+.constraint-input:focus,
+.source-input:focus,
+.variable-input:focus,
+.tag-input:focus,
+.effort-select:focus,
+.neon-search:focus-within {
+  outline: none;
+  border-color: hsl(198 95% 62% / 0.7);
+  box-shadow:
+    0 0 0 1px hsl(198 95% 62% / 0.35),
+    0 0 18px -2px var(--accent-soft);
 }
 
 .warn {
@@ -260,19 +300,23 @@ textarea::placeholder {
 }
 
 .text-button {
-  background: none;
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  background:
+    linear-gradient(hsl(0 0% 100% / 0.06), hsl(0 0% 100% / 0) 45%),
+    var(--input-bg);
+  border: 1px solid var(--edge);
   color: var(--muted);
   font-family: var(--font-ui);
   font-size: 0.82rem;
-  padding: 5px 12px;
-  border-radius: 6px;
+  padding: 5px 14px;
+  border-radius: 999px;
   cursor: pointer;
+  transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease), color 0.15s var(--ease);
 }
 
 .text-button:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.12);
   color: var(--text);
+  border-color: hsl(198 95% 62% / 0.6);
+  box-shadow: 0 0 18px -5px var(--accent-soft);
 }
 
 .text-button:disabled {
@@ -282,18 +326,26 @@ textarea::placeholder {
 
 .add-example {
   width: 100%;
-  background: var(--card);
-  border: none;
-  border-radius: 8px;
+  background:
+    linear-gradient(hsl(0 0% 100% / 0.07), hsl(0 0% 100% / 0) 45%),
+    var(--card);
+  border: 1px solid var(--edge);
+  border-radius: 999px;
   color: var(--text);
   font-family: var(--font-ui);
-  font-size: 1.15rem;
-  padding: 14px;
+  font-size: 1rem;
+  padding: 12px;
   cursor: pointer;
+  transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease),
+    background 0.15s var(--ease);
 }
 
 .add-example:hover {
-  background: var(--card-hover);
+  background:
+    linear-gradient(hsl(0 0% 100% / 0.1), hsl(0 0% 100% / 0) 45%),
+    var(--card-hover);
+  border-color: var(--edge-strong);
+  box-shadow: 0 0 22px -6px hsl(var(--hue1) 90% 65% / 0.55);
 }
 
 /* ---------- トグル ---------- */
@@ -309,7 +361,7 @@ textarea::placeholder {
 }
 
 .toggle input {
-  accent-color: var(--focus);
+  accent-color: var(--accent);
   width: 15px;
   height: 15px;
   cursor: pointer;
@@ -329,8 +381,11 @@ textarea::placeholder {
 
 .output {
   display: block;
-  background: var(--output-bg);
+  background:
+    linear-gradient(hsl(0 0% 100% / 0.05), hsl(0 0% 100% / 0) 30%),
+    var(--output-bg);
   color: var(--output-fg);
+  border: 1px solid var(--edge);
   border-radius: var(--radius-input);
   padding: 16px 20px;
   min-height: 88px;
@@ -443,14 +498,10 @@ textarea::placeholder {
 
 .tag-input {
   min-width: calc(9ch + 20px);
-  background: rgba(0, 0, 0, 0.22);
-  border: none;
-  border-radius: 5px;
-  color: var(--text);
+  border-radius: 8px;
   font-family: var(--font-mono);
   font-size: 0.95rem;
   padding: 4px 8px;
-
 }
 
 .tag-input::placeholder {
@@ -463,44 +514,23 @@ textarea::placeholder {
   font-family: var(--font-mono);
 }
 
-.placement {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 0.75rem;
-  color: var(--muted);
-}
-
-.placement-caption {
-  white-space: nowrap;
-}
-
-.placement select {
-  background: rgba(0, 0, 0, 0.22);
-  color: var(--text);
-  border: none;
-  border-radius: 5px;
-  padding: 3px 6px;
-  font-family: var(--font-ui);
-  font-size: 0.75rem;
-  cursor: pointer;
-}
 
 .add-child {
   align-self: flex-start;
-  background: rgba(255, 255, 255, 0.09);
-  border: none;
-  border-radius: 6px;
+  background: var(--input-bg);
+  border: 1px solid var(--edge);
+  border-radius: 999px;
   color: var(--muted);
   font-family: var(--font-ui);
   font-size: 0.78rem;
-  padding: 6px 12px;
+  padding: 6px 14px;
   cursor: pointer;
+  transition: border-color 0.15s var(--ease), color 0.15s var(--ease);
 }
 
 .add-child:hover {
-  background: rgba(255, 255, 255, 0.18);
   color: var(--text);
+  border-color: hsl(198 95% 62% / 0.55);
 }
 
 @media (max-width: 600px) {
@@ -524,8 +554,9 @@ textarea::placeholder {
 .kind-switch {
   display: inline-flex;
   gap: 2px;
-  background: rgba(0, 0, 0, 0.22);
-  border-radius: 6px;
+  background: var(--input-bg);
+  border: 1px solid var(--edge);
+  border-radius: 999px;
   padding: 2px;
 }
 
@@ -535,8 +566,8 @@ textarea::placeholder {
   color: var(--muted);
   font-family: var(--font-ui);
   font-size: 0.75rem;
-  padding: 3px 10px;
-  border-radius: 4px;
+  padding: 3px 12px;
+  border-radius: 999px;
   cursor: pointer;
 }
 
@@ -545,8 +576,9 @@ textarea::placeholder {
 }
 
 .kind-option-on {
-  background: rgba(255, 255, 255, 0.2);
+  background: linear-gradient(hsl(198 95% 62% / 0.35), hsl(198 95% 55% / 0.2));
   color: var(--text);
+  box-shadow: 0 0 12px -3px var(--accent-soft);
 }
 
 /* ---------- 制約リスト ---------- */
@@ -574,20 +606,11 @@ textarea::placeholder {
 .variable-input {
   flex: 1;
   min-width: 0;
-  background: var(--input-bg);
-  color: var(--input-fg);
-  border: none;
-  border-radius: var(--radius-input);
   padding: 9px 14px;
-  font-family: var(--font-ui);
   font-size: 0.9rem;
 }
 
-.constraint-input::placeholder,
-.source-input::placeholder,
-.variable-input::placeholder {
-  color: #8d8d8d;
-}
+
 
 /* ---------- documents ---------- */
 
@@ -895,12 +918,8 @@ textarea::placeholder {
 }
 
 .effort-select {
-  background: rgba(0, 0, 0, 0.22);
-  color: var(--text);
-  border: none;
-  border-radius: 5px;
+  border-radius: 8px;
   padding: 4px 8px;
-  font-family: var(--font-ui);
   font-size: 0.8rem;
   cursor: pointer;
 }
@@ -914,6 +933,15 @@ textarea::placeholder {
 .schema-input {
   font-family: var(--font-mono);
   font-size: 0.82rem;
+}
+
+/* 生成結果とタグ名は桁を揃えたいので等幅のままにする。 */
+.output,
+.migration-content,
+.breakdown code,
+.variable-name,
+.tag-label {
+  font-family: var(--font-mono);
 }
 
 .turn-name-config {
@@ -954,6 +982,7 @@ textarea::placeholder {
 .migration-content {
   margin: 0;
   background: var(--input-bg);
+  border: 1px solid var(--edge);
   color: var(--input-fg);
   border-radius: var(--radius-input);
   padding: 12px 16px;
@@ -1242,8 +1271,10 @@ textarea::placeholder {
   padding: 8px 10px;
   margin-bottom: 8px;
   border-radius: 12px;
-  border: 1px solid hsl(var(--hue2) 12% 24%);
+  border: 1px solid var(--edge);
+  background: var(--input-bg);
   color: var(--muted);
+  transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease);
 }
 
 .neon-search input {

@@ -102,6 +102,11 @@ Now here is the real input.
 
 ### 画面
 
+配色は `specification/card_button_appearnance.jpg` のダークグラス UI に合わせている。
+面はすべて黒の半透明で、縁と focus はシアン〜バイオレットのネオン。
+本文フォントは Sawarabi Gothic（`next/font` で自己ホスト）。
+生成結果・タグ名・JSON Schema だけは桁を揃えるため等幅のままにしている。
+
 左が入力、右が生成結果と Copy ボタン。どちらも半透明のグラスカードで、
 右カラムは貼り付いて追従する。900px 以下では1カラムに折り返す。
 
