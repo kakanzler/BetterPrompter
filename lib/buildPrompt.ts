@@ -38,7 +38,6 @@ export type PromptBlock = { label: string; text: string };
 export type BuiltPrompt = {
   system: string;
   user: string;
-  prefill: string;
   blocks: PromptBlock[];
 };
 
@@ -232,18 +231,15 @@ export function buildPrompt(draft: PromptDraft): BuiltPrompt {
   return {
     system: draft.role.trim(),
     user: blocks.map((entry) => entry.text).join("\n\n"),
-    // Messages API は assistant の末尾空白を拒否するため必ず落とす。
-    prefill: draft.prefill.replace(/\s+$/, ""),
     blocks,
   };
 }
 
-/** 「全部まとめてコピー」用に3つのターンを1つのテキストへ落とす。 */
+/** 「全部まとめてコピー」用に各ターンを1つのテキストへ落とす。 */
 export function flattenPrompt(built: BuiltPrompt): string {
   const parts: string[] = [];
   if (built.system) parts.push(`[system]\n${built.system}`);
   if (built.user) parts.push(`[user]\n${built.user}`);
-  if (built.prefill) parts.push(`[assistant]\n${built.prefill}`);
   return parts.join("\n\n");
 }
 

@@ -33,6 +33,9 @@ export type DocumentEntry = {
   collapsed?: boolean;
 };
 
+/** output_config.effort。空文字列は「指定しない」。 */
+export type Effort = "" | "low" | "medium" | "high" | "xhigh" | "max";
+
 export type PromptDraft = {
   role: string;
   instruction: string;
@@ -43,7 +46,9 @@ export type PromptDraft = {
   examples: Example[];
   customSections: CustomNode[];
   includeRealInput: boolean;
-  prefill: string;
+  /** output_config.format に渡す JSON Schema。文字列のまま持ち、表示時に検証する。 */
+  outputSchema: string;
+  effort: Effort;
   /** 変数のテスト値。プレビュー用で、下書き本体は書き換えない。 */
   variableValues: Record<string, string>;
 };
@@ -77,7 +82,8 @@ export function defaultDraft(): PromptDraft {
     examples: [emptyExample(DEFAULT_EXAMPLE_ID)],
     customSections: [],
     includeRealInput: true,
-    prefill: "",
+    outputSchema: "",
+    effort: "",
     variableValues: {},
   };
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { normalizeDraft } from "./useDraftStorage";
 
-/** Phase A/B のキーを一切持たない、旧バージョンが書き出した下書き。 */
+/** Phase A/B のキーを一切持たない、初期バージョンが書き出した下書き。 */
 const LEGACY_DRAFT = {
   instruction: "記事を3行で要約してください。",
   examples: [{ id: "default", input: "本文A", thinking: "", idealOutput: "・要点A" }],
@@ -9,32 +9,69 @@ const LEGACY_DRAFT = {
   includeRealInput: true,
 };
 
+/** prefill を持っていた頃（Phase A/B）の下書き。 */
+const PREFILL_DRAFT = {
+  ...LEGACY_DRAFT,
+  role: "あなたは編集者です。",
+  prefill: "<analysis>",
+};
+
 describe("normalizeDraft の後方互換", () => {
-  it("旧形式の下書きを読める", () => {
+  it("初期形式の下書きを読める", () => {
     const restored = normalizeDraft(LEGACY_DRAFT);
-    expect(restored?.instruction).toBe("記事を3行で要約してください。");
-    expect(restored?.examples).toHaveLength(1);
-    expect(restored?.customSections[0].tag).toBe("context");
-    expect(restored?.includeRealInput).toBe(true);
+    expect(restored?.draft.instruction).toBe("記事を3行で要約してください。");
+    expect(restored?.draft.examples).toHaveLength(1);
+    expect(restored?.draft.customSections[0].tag).toBe("context");
+    expect(restored?.draft.includeRealInput).toBe(true);
   });
 
   it("欠けている新キーを既定値で埋める", () => {
     const restored = normalizeDraft(LEGACY_DRAFT);
-    expect(restored?.role).toBe("");
-    expect(restored?.prefill).toBe("");
-    expect(restored?.chainOfThought).toBe(false);
-    expect(restored?.longContextMode).toBe(false);
-    expect(restored?.constraints).toEqual([]);
-    expect(restored?.documents).toEqual([]);
-    expect(restored?.variableValues).toEqual({});
+    expect(restored?.draft.role).toBe("");
+    expect(restored?.draft.chainOfThought).toBe(false);
+    expect(restored?.draft.longContextMode).toBe(false);
+    expect(restored?.draft.constraints).toEqual([]);
+    expect(restored?.draft.documents).toEqual([]);
+    expect(restored?.draft.variableValues).toEqual({});
+    expect(restored?.draft.outputSchema).toBe("");
+    expect(restored?.draft.effort).toBe("");
   });
 
   it("kind を持たない example は良い例になる", () => {
-    expect(normalizeDraft(LEGACY_DRAFT)?.examples[0].kind).toBe("positive");
+    expect(normalizeDraft(LEGACY_DRAFT)?.draft.examples[0].kind).toBe("positive");
   });
 
   it("example が0件でも空画面にならないよう1件残す", () => {
-    expect(normalizeDraft({ examples: [] })?.examples).toHaveLength(1);
+    expect(normalizeDraft({ examples: [] })?.draft.examples).toHaveLength(1);
+  });
+});
+
+describe("撤去した prefill の扱い", () => {
+  it("中身があれば droppedPrefill に載せ、draft には含めない", () => {
+    const restored = normalizeDraft(PREFILL_DRAFT);
+    expect(restored?.droppedPrefill).toBe("<analysis>");
+    expect(restored?.draft).not.toHaveProperty("prefill");
+    // 他のフィールドは巻き添えにしない。
+    expect(restored?.draft.role).toBe("あなたは編集者です。");
+  });
+
+  it("prefill が無ければ droppedPrefill は undefined", () => {
+    expect(normalizeDraft(LEGACY_DRAFT)?.droppedPrefill).toBeUndefined();
+  });
+
+  it("空白だけの prefill では通知を出さない", () => {
+    expect(normalizeDraft({ ...LEGACY_DRAFT, prefill: "   \n " })?.droppedPrefill).toBeUndefined();
+  });
+});
+
+describe("effort の正規化", () => {
+  it("既知の値はそのまま通す", () => {
+    expect(normalizeDraft({ effort: "xhigh" })?.draft.effort).toBe("xhigh");
+  });
+
+  it("知らない値は「指定しない」に落とす", () => {
+    expect(normalizeDraft({ effort: "turbo" })?.draft.effort).toBe("");
+    expect(normalizeDraft({ effort: 3 })?.draft.effort).toBe("");
   });
 });
 
@@ -52,10 +89,10 @@ describe("normalizeDraft の防御", () => {
       documents: { not: "an array" },
       variableValues: { OK: "値", NG: 1 },
     });
-    expect(restored?.instruction).toBe("");
-    expect(restored?.constraints).toEqual([]);
-    expect(restored?.documents).toEqual([]);
-    expect(restored?.variableValues).toEqual({ OK: "値" });
+    expect(restored?.draft.instruction).toBe("");
+    expect(restored?.draft.constraints).toEqual([]);
+    expect(restored?.draft.documents).toEqual([]);
+    expect(restored?.draft.variableValues).toEqual({ OK: "値" });
   });
 
   it("深すぎるネストは打ち切る", () => {
@@ -64,7 +101,7 @@ describe("normalizeDraft の防御", () => {
     const restored = normalizeDraft({ customSections: [node] });
 
     let depth = 0;
-    let cursor = restored?.customSections[0];
+    let cursor = restored?.draft.customSections[0];
     while (cursor && cursor.children.length > 0) {
       cursor = cursor.children[0];
       depth += 1;

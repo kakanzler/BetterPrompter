@@ -817,3 +817,148 @@ textarea::placeholder {
     gap: 4px;
   }
 }
+
+/* ---------- 補足テキスト ---------- */
+
+.inline-note {
+  margin: -12px 0 0;
+  font-size: 0.75rem;
+  color: var(--muted);
+  opacity: 0.85;
+  line-height: 1.6;
+}
+
+.inline-note code,
+.breakdown-note code {
+  font-family: var(--font-mono);
+}
+
+.breakdown-note {
+  margin: 12px 0 2px;
+  font-size: 0.72rem;
+  color: var(--muted);
+  opacity: 0.75;
+  line-height: 1.6;
+}
+
+/* ---------- Output schema ---------- */
+
+.schema-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--card);
+  border-radius: var(--radius-card);
+  padding: 16px 24px 18px;
+}
+
+.schema-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.schema-caption {
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+}
+
+.effort-select {
+  background: rgba(0, 0, 0, 0.22);
+  color: var(--text);
+  border: none;
+  border-radius: 5px;
+  padding: 4px 8px;
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.schema-note {
+  font-size: 0.72rem;
+  color: var(--muted);
+  opacity: 0.8;
+}
+
+.schema-input {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+}
+
+.turn-name-config {
+  background: rgba(214, 188, 250, 0.25);
+}
+
+/* ---------- 移行通知 ---------- */
+
+.migration-notice {
+  background: var(--card);
+  border-radius: var(--radius-card);
+  border-left: 4px solid var(--warn);
+  padding: 16px 22px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.migration-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.migration-head strong {
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+.migration-body {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.7;
+  color: var(--muted);
+}
+
+.migration-content {
+  margin: 0;
+  background: var(--input-bg);
+  color: var(--input-fg);
+  border-radius: var(--radius-input);
+  padding: 12px 16px;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: auto;
+}
+
+.migration-table {
+  border-collapse: collapse;
+  font-size: 0.78rem;
+  color: var(--muted);
+  width: 100%;
+}
+
+.migration-table th,
+.migration-table td {
+  text-align: left;
+  padding: 5px 10px 5px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  vertical-align: top;
+}
+
+.migration-table th {
+  font-weight: 500;
+  color: var(--text);
+  opacity: 0.85;
+}
+
+@media (max-width: 600px) {
+  .schema-editor,
+  .migration-notice {
+    padding: 12px 16px 18px;
+    border-radius: 18px;
+  }
+}

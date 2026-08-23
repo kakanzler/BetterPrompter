@@ -5,9 +5,12 @@ import {
   defaultDraft,
   type CustomNode,
   type DocumentEntry,
+  type Effort,
   type Example,
   type PromptDraft,
 } from "./types";
+
+const EFFORTS: Effort[] = ["low", "medium", "high", "xhigh", "max"];
 
 const STORAGE_KEY = "betterprompter:draft";
 
@@ -78,18 +81,28 @@ function normalizeExamples(value: unknown): Example[] {
   });
 }
 
+export type NormalizeResult = {
+  draft: PromptDraft;
+  /**
+   * 撤去した Assistant prefill に中身があった場合だけ入る。
+   * 黙って捨てず、呼び出し側が移行通知でユーザーに見せるために返している。
+   */
+  droppedPrefill?: string;
+};
+
 /**
  * 外から来た JSON（localStorage / インポートファイル）を PromptDraft に整える。
  * 形が違えば null を返し、呼び出し側は既定値のまま続行する。
  * 新しいキーを持たない古い下書きも、既定値で埋めてそのまま読めるようにしてある。
  */
-export function normalizeDraft(value: unknown): PromptDraft | null {
+export function normalizeDraft(value: unknown): NormalizeResult | null {
   if (typeof value !== "object" || value === null) return null;
   const raw = value as Record<string, unknown>;
 
   const examples = normalizeExamples(raw.examples);
+  const prefill = asString(raw.prefill).trim();
 
-  return {
+  const draft: PromptDraft = {
     role: asString(raw.role),
     instruction: asString(raw.instruction),
     chainOfThought: raw.chainOfThought === true,
@@ -100,9 +113,12 @@ export function normalizeDraft(value: unknown): PromptDraft | null {
     examples: examples.length > 0 ? examples : defaultDraft().examples,
     customSections: normalizeNodes(raw.customSections, 0, "section"),
     includeRealInput: raw.includeRealInput !== false,
-    prefill: asString(raw.prefill),
+    outputSchema: asString(raw.outputSchema),
+    effort: EFFORTS.includes(raw.effort as Effort) ? (raw.effort as Effort) : "",
     variableValues: asStringMap(raw.variableValues),
   };
+
+  return prefill ? { draft, droppedPrefill: prefill } : { draft };
 }
 
 /**
@@ -113,17 +129,21 @@ export function normalizeDraft(value: unknown): PromptDraft | null {
 export function useDraftStorage(): [
   PromptDraft,
   Dispatch<SetStateAction<PromptDraft>>,
-  boolean,
+  string | undefined,
 ] {
   const [draft, setDraft] = useState<PromptDraft>(defaultDraft);
   const [hydrated, setHydrated] = useState(false);
+  const [droppedPrefill, setDroppedPrefill] = useState<string | undefined>();
 
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const restored = normalizeDraft(JSON.parse(raw));
-        if (restored) setDraft(restored);
+        if (restored) {
+          setDraft(restored.draft);
+          setDroppedPrefill(restored.droppedPrefill);
+        }
       }
     } catch {
       // 壊れた保存データは捨てて既定値で始める。
@@ -141,5 +161,5 @@ export function useDraftStorage(): [
     }
   }, [draft, hydrated]);
 
-  return [draft, setDraft, hydrated];
+  return [draft, setDraft, droppedPrefill];
 }

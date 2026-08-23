@@ -7,10 +7,13 @@ import CustomNodeEditor from "@/components/CustomNodeEditor";
 import DocumentCard from "@/components/DocumentCard";
 import ExampleCard from "@/components/ExampleCard";
 import LintPanel from "@/components/LintPanel";
+import MigrationNotice from "@/components/MigrationNotice";
 import OutputPanel from "@/components/OutputPanel";
+import OutputSchemaEditor from "@/components/OutputSchemaEditor";
 import VariablePanel from "@/components/VariablePanel";
 import { buildPrompt, type BuiltPrompt } from "@/lib/buildPrompt";
 import { lintDraft } from "@/lib/lint";
+import { buildOutputConfig } from "@/lib/outputConfig";
 import { appendChild, moveNode, patchNode, removeNode } from "@/lib/tree";
 import {
   emptyDocument,
@@ -18,6 +21,7 @@ import {
   emptyNode,
   type CustomNode,
   type DocumentEntry,
+  type Effort,
   type Example,
 } from "@/lib/types";
 import { normalizeDraft, useDraftStorage } from "@/lib/useDraftStorage";
@@ -40,13 +44,14 @@ function swap<T>(items: T[], index: number, direction: -1 | 1): T[] {
 }
 
 export default function Page() {
-  const [draft, setDraft] = useDraftStorage();
+  const [draft, setDraft, droppedPrefill] = useDraftStorage();
   // プレビューは表示モードなので下書きには保存しない。
   const [previewEnabled, setPreviewEnabled] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const variables = useMemo(() => extractVariables(draft), [draft]);
   const findings = useMemo(() => lintDraft(draft), [draft]);
+  const outputConfig = useMemo(() => buildOutputConfig(draft), [draft]);
 
   const built = useMemo<BuiltPrompt>(() => {
     const raw = buildPrompt(draft);
@@ -55,7 +60,6 @@ export default function Page() {
     return {
       system: applyVariables(raw.system, values),
       user: applyVariables(raw.user, values),
-      prefill: applyVariables(raw.prefill, values),
       blocks: raw.blocks.map((block) => ({
         ...block,
         text: applyVariables(block.text, values),
@@ -185,7 +189,7 @@ export default function Page() {
   async function importJson(file: File) {
     try {
       const restored = normalizeDraft(JSON.parse(await file.text()));
-      if (restored) setDraft(restored);
+      if (restored) setDraft(restored.draft);
       else window.alert("この JSON は BetterPrompter の形式ではありません。");
     } catch {
       window.alert("JSON を読み込めませんでした。");
@@ -222,6 +226,8 @@ export default function Page() {
         </div>
       </header>
 
+      {droppedPrefill && <MigrationNotice droppedPrefill={droppedPrefill} />}
+
       <AutoTextarea
         label="Role / System"
         value={draft.role}
@@ -249,6 +255,10 @@ export default function Page() {
         Chain-of-Thought — <code>&lt;thinking&gt;</code> で考えてから{" "}
         <code>&lt;answer&gt;</code> で答えるよう指示する
       </label>
+      <p className="inline-note">
+        現行の Claude は内部で思考するため、この指示は不要です（旧モデルや他社モデルに貼るとき用）。
+        深さは下の <code>effort</code> で指定してください。
+      </p>
 
       <div className="section-head">
         <h2 className="section-label">constraints</h2>
@@ -377,17 +387,20 @@ export default function Page() {
         </>
       )}
 
-      <AutoTextarea
-        label="Assistant prefill"
-        value={draft.prefill}
-        rows={2}
-        placeholder="応答の書き出しを固定する（例: <analysis>）"
-        onChange={(prefill) => setDraft((current) => ({ ...current, prefill }))}
+      <div className="section-head">
+        <h2 className="section-label">Output schema</h2>
+        <span className="section-note">structured outputs で出力の形を確実に固定します</span>
+      </div>
+      <OutputSchemaEditor
+        schema={draft.outputSchema}
+        effort={draft.effort}
+        onChangeSchema={(outputSchema) => setDraft((current) => ({ ...current, outputSchema }))}
+        onChangeEffort={(effort: Effort) => setDraft((current) => ({ ...current, effort }))}
       />
 
       <LintPanel findings={findings} />
 
-      <OutputPanel built={built} />
+      <OutputPanel built={built} outputConfig={outputConfig} />
     </main>
   );
 }

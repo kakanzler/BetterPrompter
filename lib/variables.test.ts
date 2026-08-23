@@ -17,7 +17,7 @@ describe("extractVariables", () => {
       draft({
         role: "あなたは{{ROLE}}です",
         instruction: "{{TOPIC}} について書く",
-        prefill: "<{{TAG}}>",
+        outputSchema: '{"title":"{{TAG}}"}',
         constraints: ["{{LIMIT}}字以内"],
         documents: [{ ...emptyDocument("d"), source: "{{SRC}}", content: "{{BODY}}" }],
         examples: [{ ...emptyExample("e"), input: "{{IN}}", thinking: "{{TH}}", idealOutput: "{{OUT}}" }],

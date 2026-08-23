@@ -62,18 +62,6 @@ describe("lintDraft", () => {
     expect(ids(clean({ examples: [negative] }))).toContain("no-examples");
   });
 
-  it("thinking があるのに CoT が OFF なら知らせる", () => {
-    const withThinking = clean();
-    withThinking.examples![0].thinking = "要点は3つ";
-    expect(ids(withThinking)).toContain("thinking-without-cot");
-  });
-
-  it("CoT が ON なら黙る", () => {
-    const withThinking = clean({ chainOfThought: true });
-    withThinking.examples![0].thinking = "要点は3つ";
-    expect(ids(withThinking)).not.toContain("thinking-without-cot");
-  });
-
   it("constraints も出力形式タグも無ければ知らせる", () => {
     expect(ids(clean({ constraints: [] }))).toContain("no-output-format");
   });
@@ -86,16 +74,6 @@ describe("lintDraft", () => {
       }),
     );
     expect(found).not.toContain("no-output-format");
-  });
-
-  it("prefill が空白で終わると warn", () => {
-    const findings = lintDraft(draft(clean({ prefill: "<analysis> " })));
-    const target = findings.find((f) => f.id === "prefill-trailing-space");
-    expect(target?.severity).toBe("warn");
-  });
-
-  it("末尾が空白でない prefill は黙る", () => {
-    expect(ids(clean({ prefill: "<analysis>" }))).not.toContain("prefill-trailing-space");
   });
 
   it("長いのに long-context モードが OFF なら知らせる", () => {
@@ -169,5 +147,49 @@ describe("unset-variable の INPUT 除外", () => {
     });
     const target = findings.find((f) => f.id === "unset-variable");
     expect(target?.message).toBe("テスト値が未設定の変数があります: {{TOPIC}}");
+  });
+});
+
+describe("現行 Claude 向けのルール", () => {
+  it("CoT が ON なら不要だと知らせる", () => {
+    expect(ids(clean({ chainOfThought: true }))).toContain("cot-not-needed");
+  });
+
+  it("CoT が OFF なら黙る", () => {
+    expect(ids(clean())).not.toContain("cot-not-needed");
+  });
+
+  it("example に thinking があれば冗長だと知らせる", () => {
+    const withThinking = clean();
+    withThinking.examples![0].thinking = "要点は3つ";
+    expect(ids(withThinking)).toContain("example-thinking-redundant");
+  });
+
+  it("CoT を勧める古いルールはもう出ない", () => {
+    const withThinking = clean();
+    withThinking.examples![0].thinking = "要点は3つ";
+    expect(ids(withThinking)).not.toContain("thinking-without-cot");
+  });
+
+  it("prefill のルールはもう出ない", () => {
+    expect(ids(clean())).not.toContain("prefill-trailing-space");
+    expect(ids()).not.toContain("prefill-trailing-space");
+  });
+
+  it("壊れた Output schema は warn", () => {
+    const findings = lintDraft(draft(clean({ outputSchema: "{ 壊れている" })));
+    const target = findings.find((f) => f.id === "invalid-output-schema");
+    expect(target?.severity).toBe("warn");
+  });
+
+  it("正しい Output schema があれば出力形式の指摘が消える", () => {
+    const found = ids(clean({ constraints: [], outputSchema: '{"type":"object"}' }));
+    expect(found).not.toContain("no-output-format");
+    expect(found).not.toContain("invalid-output-schema");
+  });
+
+  it("壊れた Output schema では出力形式の指摘も残る", () => {
+    const found = ids(clean({ constraints: [], outputSchema: "{ 壊れている" }));
+    expect(found).toContain("no-output-format");
   });
 });

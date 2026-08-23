@@ -5,6 +5,8 @@ import { countText, estimateTokens, flattenPrompt, type BuiltPrompt } from "@/li
 
 type Props = {
   built: BuiltPrompt;
+  /** output_config。指定が何も無ければ null で、ブロックごと出さない。 */
+  outputConfig: string | null;
 };
 
 function Stats({ text }: { text: string }) {
@@ -76,7 +78,7 @@ function Turn({
   name: string;
   caption?: string;
   text: string;
-  variant?: "system" | "user" | "assistant";
+  variant?: "system" | "user" | "config";
 }) {
   return (
     <section className="turn">
@@ -93,7 +95,7 @@ function Turn({
   );
 }
 
-export default function OutputPanel({ built }: Props) {
+export default function OutputPanel({ built, outputConfig }: Props) {
   const breakdown = useMemo(
     () =>
       built.blocks.map((block) => ({
@@ -104,7 +106,7 @@ export default function OutputPanel({ built }: Props) {
   );
 
   const everything = useMemo(() => flattenPrompt(built), [built]);
-  const isEmpty = !built.system && !built.user && !built.prefill;
+  const isEmpty = !built.system && !built.user && !outputConfig;
 
   return (
     <>
@@ -114,7 +116,7 @@ export default function OutputPanel({ built }: Props) {
           <CopyButton
             text={everything}
             label="全部まとめてコピー"
-            ariaLabel="System / User / Assistant を1つにまとめてコピー"
+            ariaLabel="System と User を1つにまとめてコピー"
           />
         </div>
       </div>
@@ -127,12 +129,12 @@ export default function OutputPanel({ built }: Props) {
         <div className="turns">
           {built.system && <Turn name="System" text={built.system} variant="system" />}
           {built.user && <Turn name="User" text={built.user} />}
-          {built.prefill && (
+          {outputConfig && (
             <Turn
-              name="Assistant"
-              caption="prefill — 応答の先頭に置く"
-              text={built.prefill}
-              variant="assistant"
+              name="Output config"
+              caption="プロンプト本文ではなく API パラメータ"
+              text={outputConfig}
+              variant="config"
             />
           )}
         </div>
@@ -149,6 +151,10 @@ export default function OutputPanel({ built }: Props) {
               </li>
             ))}
           </ul>
+          <p className="breakdown-note">
+            文字数からの概算です。Claude のトークナイザとは一致しません。正確な値は
+            Messages API の count_tokens でしか出せません。
+          </p>
         </details>
       )}
     </>

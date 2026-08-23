@@ -4,7 +4,12 @@ Prompt Engineering の定番手法を、手書きせずに組み立てられる 
 
 指示を先頭に置き、few-shot example を `<input>` / `<thinking>` / `<ideal_output>` に分けて
 XML タグで囲む——といった定型作業を UI で埋めるだけで、Messages API の
-**System / User / Assistant(prefill)** に対応した形で出力される。
+**System / User** ターンと **output_config** に対応した形で出力される。
+
+**現行の Claude（Opus 5 / Sonnet 5 / Fable 5 / 4.6 以降）を前提にしています。**
+出力そのものは XML なので他社モデルにも貼れますが、`output_config` は Claude 固有の
+API パラメータで、long-context モードの並べ替えも Anthropic のガイダンスに沿っています
+（OpenAI は逆に「指示は先頭」を推奨）。
 
 ## 生成されるプロンプト
 
@@ -66,9 +71,18 @@ Now here is the real input.
 <input>
 {{INPUT}}
 </input>
+```
 
-[assistant]
-<analysis>
+`output_config` は別ブロックとして、そのまま API に渡せる形で出る:
+
+```json
+{
+  "effort": "high",
+  "format": {
+    "type": "json_schema",
+    "schema": { "type": "object", "properties": { "summary": { "type": "string" } } }
+  }
+}
 ```
 
 空のフィールドはタグごと省略される（`thinking` を書かなければ `<thinking>` は出力されない）。
@@ -80,19 +94,21 @@ Now here is the real input.
 
 - **Role / System** — 役割を system ターンに渡す
 - **Instruction** — やってほしいことを先頭に置く
-- **Chain-of-Thought トグル** — `<thinking>` で考えてから `<answer>` で答えるよう定型指示を挿入
+- **Chain-of-Thought トグル** — `<thinking>` で考えてから `<answer>` で答えるよう定型指示を挿入。
+  現行モデルでは不要なので既定は OFF（旧モデル・他社モデル向け）
 - **constraints** — 守ってほしい条件を箇条書きで `<constraints>` に構造化
 - **documents** — 長文資料を Anthropic 推奨の `<document index="N">` 形式でプロンプト先頭に配置
 - **long-context モード** — 資料が長いとき、指示を example の後ろ（末尾寄り）へ移す
 - **example（良い例 / 悪い例）** — 悪い例は `<negative_examples>` に分け、
   フィールドを `<why_wrong>` / `<bad_output>` に読み替える
 - **custom tags** — 任意の XML タグを無制限にネスト（examples の前後を選択可）
-- **Assistant prefill** — 応答の書き出しを固定して形式を強制する
+- **Output schema** — structured outputs（`output_config.format`）で出力の形を確実に固定する。
+  `effort` で思考の深さも指定できる
 - **variables** — `{{名前}}` を自動検出し、テスト値を当てた完成形をプレビュー
 
 ### 支援機能
 
-- **チェック（Lint）** — example が少ない、出力形式が未指定、prefill が空白で終わっている等を指摘
+- **チェック（Lint）** — example が少ない、出力形式が未指定、スキーマが壊れている等を指摘
 - 役割ごとの Copy と「全部まとめてコピー」
 - セクション別のトークン内訳（概算）
 - 入力欄ごとの文字数表示。日本語を含まない英文なら単語数も併記
@@ -137,10 +153,32 @@ npm run build
 | パス | 役割 |
 |---|---|
 | `app/page.tsx` | 状態オーナー。下書き全体を保持し、子コンポーネントへ渡す |
-| `lib/buildPrompt.ts` | 下書き → System/User/Assistant の純粋関数。出力仕様の単一の真実の源 |
+| `lib/buildPrompt.ts` | 下書き → System / User の純粋関数。出力仕様の単一の真実の源 |
 | `lib/lint.ts` | 下書きの静的チェック。外部通信もモデル呼び出しもしない |
+| `lib/outputConfig.ts` | JSON Schema の検証と `output_config` の組み立て |
 | `lib/variables.ts` | `{{VAR}}` の検出とテスト値の適用 |
 | `lib/tree.ts` | カスタムタグのツリー操作（更新 / 削除 / 並べ替え / 子の追加） |
 | `lib/useDraftStorage.ts` | localStorage 永続化 + 外部 JSON の正規化（旧形式との互換もここ） |
-| `components/` | ExampleCard / DocumentCard / CustomNodeEditor / ConstraintList / VariablePanel / LintPanel / AutoTextarea / OutputPanel |
+| `components/` | ExampleCard / DocumentCard / CustomNodeEditor / ConstraintList / OutputSchemaEditor / VariablePanel / LintPanel / MigrationNotice / AutoTextarea / OutputPanel |
 | `specification/UI.png` | 元になった UI デザイン |
+
+## Assistant prefill を外した理由
+
+以前は応答の先頭を固定する Assistant prefill 欄があったが、**現行の Claude では
+最終 assistant ターンの prefill が 400 エラーになる**（Fable 5 / Opus 5 / Sonnet 5 /
+Opus 4.6・4.7・4.8 / Sonnet 4.6。Haiku 4.5 と 4.5 以前では今も有効）。
+壊れたプロンプトを作らせないよう機能ごと撤去し、用途別の代替を用意した。
+
+| prefill の用途 | 代替 |
+|---|---|
+| JSON / スキーマ形式を強制 | **Output schema**（`output_config.format`） |
+| 分類ラベルを強制 | enum を持つ Output schema |
+| 前置きを省かせる | Role / System に「前置きなしで直接答える」と書く |
+| 中断した応答の続き | Instruction に「直前の応答は〜で切れた。続きを書いて」と書く |
+| リマインダの注入 | Instruction かカスタムタグに入れる |
+
+prefill 入りの下書きを読み込むと、内容を提示したうえでこの対応表を出す移行通知が表示される。
+
+同様に、Chain-of-Thought の `<thinking>` 指示も現行モデルでは不要（内部で思考するため）。
+トグルは旧モデル・他社モデル向けに残してあるが、UI と Lint の両方で注意を出す。
+思考の深さは prose ではなく `effort` で指定する。

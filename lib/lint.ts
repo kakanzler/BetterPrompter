@@ -1,4 +1,5 @@
 import { buildPrompt, estimateTokens, sanitizeTag } from "./buildPrompt";
+import { parseSchema } from "./outputConfig";
 import { extractVariables } from "./variables";
 import type { Example, PromptDraft } from "./types";
 
@@ -70,13 +71,21 @@ export function lintDraft(draft: PromptDraft): LintFinding[] {
     });
   }
 
-  const hasThinking = filled.some((example) => example.thinking.trim());
-  if (hasThinking && !draft.chainOfThought) {
+  if (draft.chainOfThought) {
     findings.push({
-      id: "thinking-without-cot",
+      id: "cot-not-needed",
       severity: "info",
-      message: "example に thinking があるのに Chain-of-Thought が OFF です",
-      hint: "ON にすると、例と同じ書式で考えるよう本文でも指示できます。",
+      message: "Chain-of-Thought は現行の Claude では不要です",
+      hint: "現行モデルは内部で思考します。深さは output_config.effort で指定してください。",
+    });
+  }
+
+  if (filled.some((example) => example.thinking.trim())) {
+    findings.push({
+      id: "example-thinking-redundant",
+      severity: "info",
+      message: "example に thinking が入っています",
+      hint: "現行モデルは内部で思考するため、省いても結果が変わりにくい欄です。",
     });
   }
 
@@ -84,21 +93,22 @@ export function lintDraft(draft: PromptDraft): LintFinding[] {
   const hasFormatTag = draft.customSections.some((section) =>
     FORMAT_TAGS.includes(sanitizeTag(section.tag).toLowerCase()),
   );
-  if (!hasConstraints && !hasFormatTag) {
+  const schema = parseSchema(draft.outputSchema);
+  if (schema.status === "error") {
+    findings.push({
+      id: "invalid-output-schema",
+      severity: "warn",
+      message: "Output schema が JSON として読めません",
+      hint: `直すまで output_config には出力されません: ${schema.message}`,
+    });
+  }
+
+  if (!hasConstraints && !hasFormatTag && schema.status !== "ok") {
     findings.push({
       id: "no-output-format",
       severity: "info",
       message: "出力形式の指定がありません",
-      hint: "constraints か <output_format> タグで形式を決めると、揺れが減ります。",
-    });
-  }
-
-  if (draft.prefill && draft.prefill !== draft.prefill.replace(/\s+$/, "")) {
-    findings.push({
-      id: "prefill-trailing-space",
-      severity: "warn",
-      message: "Assistant prefill が空白で終わっています",
-      hint: "Messages API はこれを拒否します。出力では自動で削っています。",
+      hint: "JSON がほしいなら Output schema（structured outputs）が確実です。文章なら constraints でも足ります。",
     });
   }
 

@@ -243,7 +243,7 @@ describe("countText の英語判定", () => {
   });
 });
 
-describe("Role / prefill（3分割出力）", () => {
+describe("Role（System / User の分割出力）", () => {
   it("Role が空なら system は空文字列", () => {
     expect(buildFull(draft()).system).toBe("");
   });
@@ -254,19 +254,16 @@ describe("Role / prefill（3分割出力）", () => {
     expect(built.user).not.toContain("role");
   });
 
-  it("prefill の末尾空白は落とす", () => {
-    expect(buildFull(draft({ prefill: "<analysis>\n  " })).prefill).toBe("<analysis>");
+  it("BuiltPrompt に prefill は存在しない", () => {
+    expect("prefill" in buildFull(draft({ role: "編集者", instruction: "要約する" }))).toBe(false);
   });
 
-  it("prefill の先頭は保つ", () => {
-    expect(buildFull(draft({ prefill: "  <analysis>" })).prefill).toBe("  <analysis>");
-  });
-
-  it("flattenPrompt は中身のあるターンだけ並べる", () => {
-    const built = buildFull(draft({ role: "編集者", instruction: "要約する", prefill: "<a>" }));
+  it("flattenPrompt は assistant ターンを出さない", () => {
+    const built = buildFull(draft({ role: "編集者", instruction: "要約する" }));
     expect(flattenPrompt(built)).toBe(
-      "[system]\n編集者\n\n[user]\n<instructions>\n要約する\n</instructions>\n\n[assistant]\n<a>",
+      "[system]\n編集者\n\n[user]\n<instructions>\n要約する\n</instructions>",
     );
+    expect(flattenPrompt(built)).not.toContain("[assistant]");
   });
 
   it("Role だけなら user は空のまま", () => {

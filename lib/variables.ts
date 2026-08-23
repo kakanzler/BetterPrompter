@@ -27,7 +27,7 @@ export function extractVariables(draft: PromptDraft): string[] {
 
   collect(draft.role, found);
   collect(draft.instruction, found);
-  collect(draft.prefill, found);
+  collect(draft.outputSchema, found);
   for (const constraint of draft.constraints) collect(constraint, found);
   for (const document of draft.documents) {
     collect(document.source, found);
