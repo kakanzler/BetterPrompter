@@ -1,0 +1,323 @@
+:root {
+  --bg: #3d3d3d;
+  --card: #6b6b6b;
+  --card-hover: #797979;
+  --input-bg: #ececec;
+  --input-fg: #1a1a1a;
+  --text: #ffffff;
+  --muted: #cfcfcf;
+  --output-bg: #ffffff;
+  --output-fg: #1a1a1a;
+  --placeholder: #c9c9c9;
+  --focus: #8ab4f8;
+  --warn: #ffd479;
+  --danger: #ff9a8b;
+
+  --radius-input: 10px;
+  --radius-card: 24px;
+  --font-ui: "Segoe UI", "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN",
+    "Yu Gothic UI", Meiryo, sans-serif;
+  --font-mono: "Cascadia Code", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* ---------- レイアウト ---------- */
+
+.page {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 32px 24px 96px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.page-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.page-head-actions,
+.section-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.app-title {
+  margin: 0;
+  font-size: 1.6rem;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+}
+
+.section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* ---------- ラベルと入力 ---------- */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.section-label {
+  margin: 0;
+  font-size: 1.3rem;
+  font-weight: 400;
+  color: var(--text);
+}
+
+.tag-label {
+  font-size: 1.05rem;
+  font-weight: 400;
+  color: var(--text);
+  font-family: var(--font-mono);
+}
+
+textarea {
+  width: 100%;
+  min-height: 56px;
+  resize: none;
+  overflow: hidden;
+  background: var(--input-bg);
+  color: var(--input-fg);
+  border: none;
+  border-radius: var(--radius-input);
+  padding: 12px 16px;
+  font-family: var(--font-ui);
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
+textarea::placeholder {
+  color: #8d8d8d;
+}
+
+.warn {
+  font-size: 0.78rem;
+  color: var(--warn);
+}
+
+/* ---------- example カード ---------- */
+
+.example-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.example-card {
+  background: var(--card);
+  border-radius: var(--radius-card);
+  padding: 16px 24px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.example-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.example-card-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.example-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.collapse-toggle {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  padding: 4px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.collapse-toggle:hover {
+  color: var(--text);
+}
+
+.chevron {
+  font-size: 0.7rem;
+}
+
+/* ---------- ボタン ---------- */
+
+.icon-button {
+  background: none;
+  border: none;
+  color: var(--muted);
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  line-height: 1;
+}
+
+.icon-button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--text);
+}
+
+.icon-button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.icon-button-danger:hover:not(:disabled) {
+  color: var(--danger);
+}
+
+.text-button {
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: 0.82rem;
+  padding: 5px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.text-button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text);
+}
+
+.text-button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.add-example {
+  width: 100%;
+  background: var(--card);
+  border: none;
+  border-radius: 8px;
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 1.15rem;
+  padding: 14px;
+  cursor: pointer;
+}
+
+.add-example:hover {
+  background: var(--card-hover);
+}
+
+/* ---------- トグル ---------- */
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--muted);
+  cursor: pointer;
+  align-self: flex-start;
+}
+
+.toggle input {
+  accent-color: var(--focus);
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+}
+
+.toggle code {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+}
+
+/* ---------- 出力 ---------- */
+
+.stats {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.output {
+  display: block;
+  background: var(--output-bg);
+  color: var(--output-fg);
+  border-radius: var(--radius-input);
+  padding: 16px 20px;
+  min-height: 88px;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.output-placeholder {
+  color: var(--placeholder);
+  font-size: 1.15rem;
+  display: block;
+  text-align: center;
+  padding: 12px 0;
+}
+
+@media (max-width: 600px) {
+  .page {
+    padding: 24px 16px 72px;
+  }
+
+  .example-card {
+    padding: 14px 16px 20px;
+    border-radius: 18px;
+  }
+}
