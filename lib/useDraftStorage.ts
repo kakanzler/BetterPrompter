@@ -69,14 +69,17 @@ function normalizeExamples(value: unknown): Example[] {
   if (!Array.isArray(value)) return [];
   return value.map((item, index) => {
     const entry = asRecord(item);
+    const thinking = asString(entry.thinking);
     return {
       id: typeof entry.id === "string" && entry.id ? entry.id : `restored-${index}`,
       input: asString(entry.input),
-      thinking: asString(entry.thinking),
+      thinking,
       idealOutput: asString(entry.idealOutput),
       collapsed: entry.collapsed === true,
       // kind を持たない旧データは良い例として扱う。
       kind: entry.kind === "negative" ? "negative" : "positive",
+      // showThinking を持たない旧データでも、中身があるなら開いた状態で復元する。
+      showThinking: entry.showThinking === true || thinking.trim() !== "",
     };
   });
 }
@@ -99,18 +102,16 @@ export function normalizeDraft(value: unknown): NormalizeResult | null {
   if (typeof value !== "object" || value === null) return null;
   const raw = value as Record<string, unknown>;
 
-  const examples = normalizeExamples(raw.examples);
   const prefill = asString(raw.prefill).trim();
 
   const draft: PromptDraft = {
     role: asString(raw.role),
     instruction: asString(raw.instruction),
-    chainOfThought: raw.chainOfThought === true,
     constraints: asStringArray(raw.constraints),
     documents: normalizeDocuments(raw.documents),
     longContextMode: raw.longContextMode === true,
-    // Example が0件だと追加ボタンしかない空画面になるため、必ず1件は残す。
-    examples: examples.length > 0 ? examples : defaultDraft().examples,
+    // example は使うとは限らないので0件のまま通す。
+    examples: normalizeExamples(raw.examples),
     customSections: normalizeNodes(raw.customSections, 0, "section"),
     includeRealInput: raw.includeRealInput !== false,
     outputSchema: asString(raw.outputSchema),

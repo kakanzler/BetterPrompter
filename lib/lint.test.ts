@@ -30,15 +30,14 @@ describe("lintDraft", () => {
     expect(ids(clean())).toEqual([]);
   });
 
-  it("空の下書きでは指示と example を warn する", () => {
-    const findings = lintDraft(draft());
-    expect(findings.map((f) => f.id)).toContain("no-instruction");
-    expect(findings.map((f) => f.id)).toContain("no-examples");
-    expect(findings.filter((f) => f.severity === "warn").length).toBeGreaterThanOrEqual(2);
+  it("書き始めたのに指示が空なら warn する", () => {
+    const findings = lintDraft(draft({ role: "あなたは編集者です。" }));
+    const target = findings.find((f) => f.id === "no-instruction");
+    expect(target?.severity).toBe("warn");
   });
 
   it("指示が空なら vague は重ねて出さない", () => {
-    const found = ids();
+    const found = ids({ role: "あなたは編集者です。" });
     expect(found).toContain("no-instruction");
     expect(found).not.toContain("vague-instruction");
   });
@@ -151,20 +150,6 @@ describe("unset-variable の INPUT 除外", () => {
 });
 
 describe("現行 Claude 向けのルール", () => {
-  it("CoT が ON なら不要だと知らせる", () => {
-    expect(ids(clean({ chainOfThought: true }))).toContain("cot-not-needed");
-  });
-
-  it("CoT が OFF なら黙る", () => {
-    expect(ids(clean())).not.toContain("cot-not-needed");
-  });
-
-  it("example に thinking があれば冗長だと知らせる", () => {
-    const withThinking = clean();
-    withThinking.examples![0].thinking = "要点は3つ";
-    expect(ids(withThinking)).toContain("example-thinking-redundant");
-  });
-
   it("CoT を勧める古いルールはもう出ない", () => {
     const withThinking = clean();
     withThinking.examples![0].thinking = "要点は3つ";
@@ -191,5 +176,38 @@ describe("現行 Claude 向けのルール", () => {
   it("壊れた Output schema では出力形式の指摘も残る", () => {
     const found = ids(clean({ constraints: [], outputSchema: "{ 壊れている" }));
     expect(found).toContain("no-output-format");
+  });
+});
+
+describe("出しすぎない Lint", () => {
+  it("白紙の下書きでは何も出さない", () => {
+    expect(lintDraft(defaultDraft())).toEqual([]);
+  });
+
+  it("Instruction が空のうちは example を急かさない", () => {
+    // Role だけ書き始めた段階。白紙ではないが example の話をする段ではない。
+    expect(ids({ role: "あなたは編集者です。" })).not.toContain("no-examples");
+  });
+
+  it("Instruction を書いてから example の不足を info で知らせる", () => {
+    const findings = lintDraft(draft({ instruction: "記事を3行で要約してください。" }));
+    const target = findings.find((f) => f.id === "no-examples");
+    expect(target?.severity).toBe("info");
+  });
+
+  it("example 0件を要対応（warn）にはしない", () => {
+    const warns = lintDraft(draft({ instruction: "記事を3行で要約してください。" }))
+      .filter((f) => f.severity === "warn")
+      .map((f) => f.id);
+    expect(warns).not.toContain("no-examples");
+  });
+
+  it("撤去したルールはどの入力でも出ない", () => {
+    for (const found of [ids(), ids(clean()), ids({ role: "編集者" })]) {
+      expect(found).not.toContain("cot-not-needed");
+      expect(found).not.toContain("example-thinking-redundant");
+      expect(found).not.toContain("prefill-trailing-space");
+      expect(found).not.toContain("thinking-without-cot");
+    }
   });
 });

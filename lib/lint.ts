@@ -32,7 +32,23 @@ function isFilled(example: Example): boolean {
  * 下書きを静的に点検する。外部通信もモデル呼び出しもせず、
  * ルールはすべて決定的に評価する。
  */
+/** まだ何も書いていない下書きか。ここで真なら助言する相手がいない。 */
+function isBlank(draft: PromptDraft): boolean {
+  return (
+    !draft.role.trim() &&
+    !draft.instruction.trim() &&
+    !draft.outputSchema.trim() &&
+    !draft.constraints.some((item) => item.trim()) &&
+    !draft.documents.some((doc) => doc.source.trim() || doc.content.trim()) &&
+    !draft.examples.some(isFilled) &&
+    draft.customSections.length === 0
+  );
+}
+
 export function lintDraft(draft: PromptDraft): LintFinding[] {
+  // 白紙の画面に指摘を並べても急かすだけなので、書き始めるまでは黙る。
+  if (isBlank(draft)) return [];
+
   const findings: LintFinding[] = [];
   const built = buildPrompt(draft);
 
@@ -55,37 +71,20 @@ export function lintDraft(draft: PromptDraft): LintFinding[] {
   const filled = draft.examples.filter(isFilled);
   const positives = filled.filter((example) => (example.kind ?? "positive") === "positive");
 
-  if (positives.length === 0) {
+  // 指示すら固まっていない段階で example を急かしても仕方がない。
+  if (positives.length === 0 && draft.instruction.trim()) {
     findings.push({
       id: "no-examples",
-      severity: "warn",
-      message: "example が1件もありません",
-      hint: "few-shot は精度をいちばん大きく動かします。まず1件足してみてください。",
+      severity: "info",
+      message: "example がありません",
+      hint: "使わなくても動きますが、few-shot は精度をいちばん大きく動かす手です。",
     });
-  } else if (positives.length < 3) {
+  } else if (positives.length > 0 && positives.length < 3) {
     findings.push({
       id: "few-examples",
       severity: "info",
       message: `example が${positives.length}件です`,
       hint: "3件以上あると出力が安定しやすくなります。",
-    });
-  }
-
-  if (draft.chainOfThought) {
-    findings.push({
-      id: "cot-not-needed",
-      severity: "info",
-      message: "Chain-of-Thought は現行の Claude では不要です",
-      hint: "現行モデルは内部で思考します。深さは output_config.effort で指定してください。",
-    });
-  }
-
-  if (filled.some((example) => example.thinking.trim())) {
-    findings.push({
-      id: "example-thinking-redundant",
-      severity: "info",
-      message: "example に thinking が入っています",
-      hint: "現行モデルは内部で思考するため、省いても結果が変わりにくい欄です。",
     });
   }
 

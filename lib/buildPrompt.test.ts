@@ -273,15 +273,16 @@ describe("Role（System / User の分割出力）", () => {
   });
 });
 
-describe("Chain-of-Thought トグル", () => {
-  it("ON で thinking_instructions が入る", () => {
-    const result = buildPrompt(draft({ instruction: "要約する", chainOfThought: true }));
-    expect(result).toContain("<thinking_instructions>");
-    expect(result.indexOf("<instructions>")).toBeLessThan(result.indexOf("<thinking_instructions>"));
+describe("撤去した Chain-of-Thought", () => {
+  it("thinking_instructions はもう出ない", () => {
+    const result = buildPrompt(draft({ instruction: "要約する" }));
+    expect(result).not.toContain("thinking_instructions");
+    expect(result).toBe("<instructions>\n要約する\n</instructions>");
   });
 
-  it("OFF なら出ない", () => {
-    expect(buildPrompt(draft({ instruction: "要約する" }))).not.toContain("thinking_instructions");
+  it("chainOfThought を持つ旧データを渡しても無視される", () => {
+    const legacy = { ...draft({ instruction: "要約する" }), chainOfThought: true } as never;
+    expect(buildFull(legacy).user).not.toContain("thinking_instructions");
   });
 });
 
@@ -372,7 +373,6 @@ describe("長文ドキュメント", () => {
 describe("long-context モード", () => {
   const base = {
     instruction: "要約する",
-    chainOfThought: true,
     constraints: ["200字以内"],
     examples: [{ ...emptyExample("g"), input: "本文" }],
     documents: [{ ...emptyDocument("d"), source: "a.md", content: "資料" }],
@@ -383,11 +383,10 @@ describe("long-context モード", () => {
     expect(result.indexOf("<instructions>")).toBeLessThan(result.indexOf("<examples>"));
   });
 
-  it("ON で指示まわり3ブロックがまとめて examples の後ろへ動く", () => {
+  it("ON で指示まわりがまとめて examples の後ろへ動く", () => {
     const result = buildPrompt(draft({ ...base, longContextMode: true }));
     const examples = result.indexOf("<examples>");
     expect(examples).toBeLessThan(result.indexOf("<instructions>"));
-    expect(examples).toBeLessThan(result.indexOf("<thinking_instructions>"));
     expect(examples).toBeLessThan(result.indexOf("<constraints>"));
   });
 

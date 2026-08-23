@@ -53,6 +53,12 @@ export default function Page() {
   const findings = useMemo(() => lintDraft(draft), [draft]);
   const outputConfig = useMemo(() => buildOutputConfig(draft), [draft]);
 
+  // 何も生成されていないうちは、助言も変数欄も出さない。
+  const hasOutput = useMemo(() => {
+    const raw = buildPrompt(draft);
+    return Boolean(raw.system || raw.user || buildOutputConfig(draft));
+  }, [draft]);
+
   const built = useMemo<BuiltPrompt>(() => {
     const raw = buildPrompt(draft);
     if (!previewEnabled) return raw;
@@ -84,14 +90,11 @@ export default function Page() {
   }
 
   function deleteExample(id: string) {
-    setDraft((current) => {
-      const remaining = current.examples.filter((example) => example.id !== id);
-      // 全部消すと入力できる場所がなくなるので、空のカードを1枚残す。
-      return {
-        ...current,
-        examples: remaining.length > 0 ? remaining : [emptyExample(newId())],
-      };
-    });
+    // example は使わない選択もあるので、0件まで消せる。
+    setDraft((current) => ({
+      ...current,
+      examples: current.examples.filter((example) => example.id !== id),
+    }));
   }
 
   function moveExample(id: string, direction: -1 | 1) {
@@ -228,179 +231,170 @@ export default function Page() {
 
       {droppedPrefill && <MigrationNotice droppedPrefill={droppedPrefill} />}
 
-      <AutoTextarea
-        label="Role / System"
-        value={draft.role}
-        rows={2}
-        placeholder="モデルに与える役割（例: あなたは経験豊富な編集者です）"
-        onChange={(role) => setDraft((current) => ({ ...current, role }))}
-      />
-
-      <AutoTextarea
-        label="Instruction"
-        value={draft.instruction}
-        rows={3}
-        placeholder="モデルにやってほしいことを書く（例: 記事を3行で要約してください）"
-        onChange={(instruction) => setDraft((current) => ({ ...current, instruction }))}
-      />
-
-      <label className="toggle">
-        <input
-          type="checkbox"
-          checked={draft.chainOfThought}
-          onChange={(event) =>
-            setDraft((current) => ({ ...current, chainOfThought: event.target.checked }))
-          }
-        />
-        Chain-of-Thought — <code>&lt;thinking&gt;</code> で考えてから{" "}
-        <code>&lt;answer&gt;</code> で答えるよう指示する
-      </label>
-      <p className="inline-note">
-        現行の Claude は内部で思考するため、この指示は不要です（旧モデルや他社モデルに貼るとき用）。
-        深さは下の <code>effort</code> で指定してください。
-      </p>
-
-      <div className="section-head">
-        <h2 className="section-label">constraints</h2>
-        <span className="section-note">守ってほしい条件を箇条書きで</span>
-      </div>
-      <ConstraintList
-        constraints={draft.constraints}
-        onChange={(constraints) => setDraft((current) => ({ ...current, constraints }))}
-      />
-
-      <div className="section-head">
-        <h2 className="section-label">documents</h2>
-        <span className="section-note">長文資料。プロンプトの先頭に置かれます</span>
-      </div>
-
-      {draft.documents.length > 0 && (
-        <div className="document-list">
-          {draft.documents.map((document, index) => (
-            <DocumentCard
-              key={document.id}
-              document={document}
-              index={index}
-              total={draft.documents.length}
-              onChange={(patch) => updateDocument(document.id, patch)}
-              onDelete={() => deleteDocument(document.id)}
-              onMove={(direction) => moveDocument(document.id, direction)}
-            />
-          ))}
-        </div>
-      )}
-
-      <button type="button" className="add-example" onClick={addDocument}>
-        ＋ add document
-      </button>
-
-      <label className="toggle">
-        <input
-          type="checkbox"
-          checked={draft.longContextMode}
-          onChange={(event) =>
-            setDraft((current) => ({ ...current, longContextMode: event.target.checked }))
-          }
-        />
-        long-context モード — 資料が長いとき、指示を example の後ろ（末尾寄り）へ移す
-      </label>
-
-      <div className="section-head">
-        <h2 className="section-label">example</h2>
-        <span className="section-note">良い例と悪い例を切り替えられます</span>
-      </div>
-
-      <div className="example-list">
-        {draft.examples.map((example, index) => (
-          <ExampleCard
-            key={example.id}
-            example={example}
-            index={index}
-            total={draft.examples.length}
-            onChange={(patch) => updateExample(example.id, patch)}
-            onDelete={() => deleteExample(example.id)}
-            onMove={(direction) => moveExample(example.id, direction)}
+      <div className="layout">
+        <div className="pane-input">
+          <AutoTextarea
+            label="Role / System"
+            value={draft.role}
+            rows={2}
+            placeholder="モデルに与える役割（例: あなたは経験豊富な編集者です）"
+            onChange={(role) => setDraft((current) => ({ ...current, role }))}
           />
-        ))}
-      </div>
 
-      <button type="button" className="add-example" onClick={addExample}>
-        ＋ add example
-      </button>
+          <AutoTextarea
+            label="Instruction"
+            value={draft.instruction}
+            rows={3}
+            placeholder="モデルにやってほしいことを書く（例: 記事を3行で要約してください）"
+            onChange={(instruction) => setDraft((current) => ({ ...current, instruction }))}
+          />
 
-      <div className="section-head">
-        <h2 className="section-label">custom tags</h2>
-        <span className="section-note">任意の XML タグをいくらでもネストできます</span>
-      </div>
-
-      {draft.customSections.length > 0 && (
-        <div className="custom-list">
-          {draft.customSections.map((section, index) => (
-            <CustomNodeEditor
-              key={section.id}
-              node={section}
-              depth={0}
-              index={index}
-              total={draft.customSections.length}
-              onChange={updateNode}
-              onDelete={deleteNode}
-              onMove={moveNodeBy}
-              onAddChild={addChildNode}
-            />
-          ))}
-        </div>
-      )}
-
-      <button type="button" className="add-example" onClick={addSection}>
-        ＋ add custom tag
-      </button>
-
-      <label className="toggle">
-        <input
-          type="checkbox"
-          checked={draft.includeRealInput}
-          onChange={(event) =>
-            setDraft((current) => ({ ...current, includeRealInput: event.target.checked }))
-          }
-        />
-        末尾に実入力の枠（<code>{"{{INPUT}}"}</code>）を付ける
-      </label>
-
-      {variables.length > 0 && (
-        <>
           <div className="section-head">
-            <h2 className="section-label">variables</h2>
-            <span className="section-note">{`{{名前}} と書くとここに現れます`}</span>
+            <h2 className="section-label">constraints</h2>
+            <span className="section-note">守ってほしい条件を箇条書きで</span>
           </div>
-          <VariablePanel
-            variables={variables}
-            values={draft.variableValues}
-            previewEnabled={previewEnabled}
-            onTogglePreview={setPreviewEnabled}
-            onChangeValue={(name, value) =>
-              setDraft((current) => ({
-                ...current,
-                variableValues: { ...current.variableValues, [name]: value },
-              }))
-            }
+          <ConstraintList
+            constraints={draft.constraints}
+            onChange={(constraints) => setDraft((current) => ({ ...current, constraints }))}
           />
-        </>
-      )}
 
-      <div className="section-head">
-        <h2 className="section-label">Output schema</h2>
-        <span className="section-note">structured outputs で出力の形を確実に固定します</span>
+          <div className="section-head">
+            <h2 className="section-label">documents</h2>
+            <span className="section-note">長文資料。プロンプトの先頭に置かれます</span>
+          </div>
+
+          {draft.documents.length > 0 && (
+            <div className="document-list">
+              {draft.documents.map((document, index) => (
+                <DocumentCard
+                  key={document.id}
+                  document={document}
+                  index={index}
+                  total={draft.documents.length}
+                  onChange={(patch) => updateDocument(document.id, patch)}
+                  onDelete={() => deleteDocument(document.id)}
+                  onMove={(direction) => moveDocument(document.id, direction)}
+                />
+              ))}
+            </div>
+          )}
+
+          <button type="button" className="add-example" onClick={addDocument}>
+            ＋ add document
+          </button>
+
+          <label className="toggle">
+            <input
+              type="checkbox"
+              checked={draft.longContextMode}
+              onChange={(event) =>
+                setDraft((current) => ({ ...current, longContextMode: event.target.checked }))
+              }
+            />
+            long-context モード — 資料が長いとき、指示を example の後ろ（末尾寄り）へ移す
+          </label>
+
+          <div className="section-head">
+            <h2 className="section-label">example</h2>
+            <span className="section-note">良い例と悪い例を切り替えられます</span>
+          </div>
+
+          {draft.examples.length > 0 && (
+            <div className="example-list">
+              {draft.examples.map((example, index) => (
+                <ExampleCard
+                  key={example.id}
+                  example={example}
+                  index={index}
+                  total={draft.examples.length}
+                  onChange={(patch) => updateExample(example.id, patch)}
+                  onDelete={() => deleteExample(example.id)}
+                  onMove={(direction) => moveExample(example.id, direction)}
+                />
+              ))}
+            </div>
+          )}
+
+          <button type="button" className="add-example" onClick={addExample}>
+            ＋ add example
+          </button>
+
+          <div className="section-head">
+            <h2 className="section-label">custom tags</h2>
+            <span className="section-note">任意の XML タグをいくらでもネストできます</span>
+          </div>
+
+          {draft.customSections.length > 0 && (
+            <div className="custom-list">
+              {draft.customSections.map((section, index) => (
+                <CustomNodeEditor
+                  key={section.id}
+                  node={section}
+                  depth={0}
+                  index={index}
+                  total={draft.customSections.length}
+                  onChange={updateNode}
+                  onDelete={deleteNode}
+                  onMove={moveNodeBy}
+                  onAddChild={addChildNode}
+                />
+              ))}
+            </div>
+          )}
+
+          <button type="button" className="add-example" onClick={addSection}>
+            ＋ add custom tag
+          </button>
+
+          <label className="toggle">
+            <input
+              type="checkbox"
+              checked={draft.includeRealInput}
+              onChange={(event) =>
+                setDraft((current) => ({ ...current, includeRealInput: event.target.checked }))
+              }
+            />
+            末尾に実入力の枠（<code>{"{{INPUT}}"}</code>）を付ける
+          </label>
+
+          {hasOutput && variables.length > 0 && (
+            <>
+              <div className="section-head">
+                <h2 className="section-label">variables</h2>
+                <span className="section-note">{`{{名前}} と書くとここに現れます`}</span>
+              </div>
+              <VariablePanel
+                variables={variables}
+                values={draft.variableValues}
+                previewEnabled={previewEnabled}
+                onTogglePreview={setPreviewEnabled}
+                onChangeValue={(name, value) =>
+                  setDraft((current) => ({
+                    ...current,
+                    variableValues: { ...current.variableValues, [name]: value },
+                  }))
+                }
+              />
+            </>
+          )}
+
+          <div className="section-head">
+            <h2 className="section-label">Output schema</h2>
+            <span className="section-note">structured outputs で出力の形を確実に固定します</span>
+          </div>
+          <OutputSchemaEditor
+            schema={draft.outputSchema}
+            effort={draft.effort}
+            onChangeSchema={(outputSchema) => setDraft((current) => ({ ...current, outputSchema }))}
+            onChangeEffort={(effort: Effort) => setDraft((current) => ({ ...current, effort }))}
+          />
+        </div>
+
+        <aside className="pane-output">
+          <OutputPanel built={built} outputConfig={outputConfig} />
+          {hasOutput && <LintPanel findings={findings} />}
+        </aside>
       </div>
-      <OutputSchemaEditor
-        schema={draft.outputSchema}
-        effort={draft.effort}
-        onChangeSchema={(outputSchema) => setDraft((current) => ({ ...current, outputSchema }))}
-        onChangeEffort={(effort: Effort) => setDraft((current) => ({ ...current, effort }))}
-      />
-
-      <LintPanel findings={findings} />
-
-      <OutputPanel built={built} outputConfig={outputConfig} />
     </main>
   );
 }

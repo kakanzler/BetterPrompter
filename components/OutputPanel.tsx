@@ -106,7 +106,6 @@ export default function OutputPanel({ built, outputConfig }: Props) {
   );
 
   const everything = useMemo(() => flattenPrompt(built), [built]);
-  const isEmpty = !built.system && !built.user && !outputConfig;
 
   return (
     <>
@@ -121,24 +120,18 @@ export default function OutputPanel({ built, outputConfig }: Props) {
         </div>
       </div>
 
-      {isEmpty ? (
-        <output className="output">
-          <span className="output-placeholder">OUTPUT HERE</span>
-        </output>
-      ) : (
-        <div className="turns">
-          {built.system && <Turn name="System" text={built.system} variant="system" />}
-          {built.user && <Turn name="User" text={built.user} />}
-          {outputConfig && (
-            <Turn
-              name="Output config"
-              caption="プロンプト本文ではなく API パラメータ"
-              text={outputConfig}
-              variant="config"
-            />
-          )}
-        </div>
-      )}
+      <div className="turns">
+        {built.system && <Turn name="System" text={built.system} variant="system" />}
+        {built.user && <Turn name="User" text={built.user} />}
+        {outputConfig && (
+          <Turn
+            name="Output config"
+            caption="プロンプト本文ではなく API パラメータ"
+            text={outputConfig}
+            variant="config"
+          />
+        )}
+      </div>
 
       {breakdown.length > 0 && (
         <details className="breakdown">

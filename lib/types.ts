@@ -1,7 +1,6 @@
 export type ExampleKind = "positive" | "negative";
 
 export type Example = {
-  /** 安定した React key。既定の1件だけは SSR と一致させるため固定値を使う。 */
   id: string;
   input: string;
   thinking: string;
@@ -9,6 +8,12 @@ export type Example = {
   collapsed?: boolean;
   /** 未指定は "positive"。旧データとの互換のため省略可能にしてある。 */
   kind?: ExampleKind;
+  /**
+   * thinking 欄（悪い例では「なぜダメか」）を出しているか。
+   * 現行モデルでは不要な欄なので、既定では出さず必要なときだけ足す。
+   * リロードや並べ替えで表示が飛ばないよう、UI 内部 state ではなく下書きに持つ。
+   */
+  showThinking?: boolean;
 };
 
 /** カスタムセクションを examples の前に置くか後ろに置くか。トップレベルのみ意味を持つ。 */
@@ -39,7 +44,6 @@ export type Effort = "" | "low" | "medium" | "high" | "xhigh" | "max";
 export type PromptDraft = {
   role: string;
   instruction: string;
-  chainOfThought: boolean;
   constraints: string[];
   documents: DocumentEntry[];
   longContextMode: boolean;
@@ -53,10 +57,16 @@ export type PromptDraft = {
   variableValues: Record<string, string>;
 };
 
-export const DEFAULT_EXAMPLE_ID = "default";
-
 export function emptyExample(id: string): Example {
-  return { id, input: "", thinking: "", idealOutput: "", collapsed: false, kind: "positive" };
+  return {
+    id,
+    input: "",
+    thinking: "",
+    idealOutput: "",
+    collapsed: false,
+    kind: "positive",
+    showThinking: false,
+  };
 }
 
 export function emptyNode(id: string, placement?: Placement): CustomNode {
@@ -70,16 +80,16 @@ export function emptyDocument(id: string): DocumentEntry {
 /**
  * 既定の下書き。SSR とクライアント初回レンダで必ず同じ値になる必要があるため、
  * ここで randomUUID() を呼んではいけない。
+ * example は使うとは限らないので0件で始める。
  */
 export function defaultDraft(): PromptDraft {
   return {
     role: "",
     instruction: "",
-    chainOfThought: false,
     constraints: [],
     documents: [],
     longContextMode: false,
-    examples: [emptyExample(DEFAULT_EXAMPLE_ID)],
+    examples: [],
     customSections: [],
     includeRealInput: true,
     outputSchema: "",

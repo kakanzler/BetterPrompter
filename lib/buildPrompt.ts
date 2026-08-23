@@ -5,12 +5,6 @@ export const REAL_INPUT_PLACEHOLDER = "{{INPUT}}";
 
 const REAL_INPUT_LEAD = "Now here is the real input.";
 
-/** CoT トグルを ON にしたときに差し込む定型指示。 */
-const COT_INSTRUCTIONS = [
-  "回答する前に <thinking> タグの中で段階的に考えてください。",
-  "考えがまとまったら <answer> タグの中に最終的な回答だけを書いてください。",
-].join("\n");
-
 /** ネストしたカスタムタグ1段あたりのインデント幅。 */
 const INDENT = "  ";
 
@@ -175,16 +169,10 @@ export function buildPrompt(draft: PromptDraft): BuiltPrompt {
   const instruction = draft.instruction.trim();
   const constraints = buildConstraints(draft);
 
-  // 指示まわりの3ブロック。long-context モードでは examples の後ろへ丸ごと動く。
+  // 指示まわりのブロック。long-context モードでは examples の後ろへ丸ごと動く。
   const directives: PromptBlock[] = [];
   if (instruction) {
     directives.push({ label: "<instructions>", text: block("instructions", instruction) });
-  }
-  if (draft.chainOfThought) {
-    directives.push({
-      label: "<thinking_instructions>",
-      text: block("thinking_instructions", COT_INSTRUCTIONS),
-    });
   }
   if (constraints) {
     directives.push({ label: "<constraints>", text: constraints });

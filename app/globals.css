@@ -45,12 +45,38 @@ body {
 /* ---------- レイアウト ---------- */
 
 .page {
-  max-width: 900px;
+  max-width: 1500px;
   margin: 0 auto;
-  padding: 32px 24px 96px;
+  padding: 32px 28px 64px;
   display: flex;
   flex-direction: column;
   gap: 20px;
+}
+
+/* 左＝入力、右＝結果。書きながら出力が見えるようにする。 */
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 32px;
+  align-items: start;
+}
+
+.pane-input,
+.pane-output {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+}
+
+/* 左をどれだけスクロールしても結果が見えたままになるように貼り付ける。 */
+.pane-output {
+  position: sticky;
+  top: 24px;
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  /* スクロールバーが内容に重ならないよう少し余白を取る。 */
+  padding-right: 4px;
 }
 
 .page-head {
@@ -301,14 +327,6 @@ textarea::placeholder {
   line-height: 1.65;
   white-space: pre-wrap;
   word-break: break-word;
-}
-
-.output-placeholder {
-  color: var(--placeholder);
-  font-size: 1.15rem;
-  display: block;
-  text-align: center;
-  padding: 12px 0;
 }
 
 @media (max-width: 600px) {
@@ -960,5 +978,40 @@ textarea::placeholder {
   .migration-notice {
     padding: 12px 16px 18px;
     border-radius: 18px;
+  }
+}
+
+/* ---------- 任意で足すフィールド ---------- */
+
+.optional-field {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.optional-field .field {
+  flex: 1;
+  min-width: 0;
+}
+
+.optional-remove {
+  margin-top: 26px;
+  flex: none;
+}
+
+/* ---------- 1カラムへの折り返し ---------- */
+
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+  }
+
+  /* 縦積みでは貼り付けても意味がないので解除する。 */
+  .pane-output {
+    position: static;
+    max-height: none;
+    overflow-y: visible;
+    padding-right: 0;
   }
 }

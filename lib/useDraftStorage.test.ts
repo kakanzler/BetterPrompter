@@ -28,7 +28,6 @@ describe("normalizeDraft の後方互換", () => {
   it("欠けている新キーを既定値で埋める", () => {
     const restored = normalizeDraft(LEGACY_DRAFT);
     expect(restored?.draft.role).toBe("");
-    expect(restored?.draft.chainOfThought).toBe(false);
     expect(restored?.draft.longContextMode).toBe(false);
     expect(restored?.draft.constraints).toEqual([]);
     expect(restored?.draft.documents).toEqual([]);
@@ -41,8 +40,20 @@ describe("normalizeDraft の後方互換", () => {
     expect(normalizeDraft(LEGACY_DRAFT)?.draft.examples[0].kind).toBe("positive");
   });
 
-  it("example が0件でも空画面にならないよう1件残す", () => {
-    expect(normalizeDraft({ examples: [] })?.draft.examples).toHaveLength(1);
+  it("example が0件ならそのまま0件で返す（1件に戻さない）", () => {
+    expect(normalizeDraft({ examples: [] })?.draft.examples).toEqual([]);
+    expect(normalizeDraft({})?.draft.examples).toEqual([]);
+  });
+
+  it("thinking に中身がある旧データは欄を開いた状態で復元する", () => {
+    const withThinking = normalizeDraft({
+      examples: [{ id: "a", input: "本文", thinking: "要点は3つ", idealOutput: "要約" }],
+    });
+    expect(withThinking?.draft.examples[0].showThinking).toBe(true);
+  });
+
+  it("thinking が空なら欄は閉じたまま", () => {
+    expect(normalizeDraft(LEGACY_DRAFT)?.draft.examples[0].showThinking).toBe(false);
   });
 });
 

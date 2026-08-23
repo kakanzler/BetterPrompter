@@ -13,9 +13,23 @@ type Props = {
 };
 
 /** 悪い例ではフィールドの意味が変わるので、ラベルも読み替える。 */
-const LABELS: Record<ExampleKind, { input: string; middle: string; output: string }> = {
-  positive: { input: "<input>", middle: "<thinking>", output: "<ideal output>" },
-  negative: { input: "<input>", middle: "<why wrong>", output: "<bad output>" },
+const LABELS: Record<
+  ExampleKind,
+  { input: string; middle: string; output: string; addMiddle: string; middleHint?: string }
+> = {
+  positive: {
+    input: "<input>",
+    middle: "<thinking>",
+    output: "<ideal output>",
+    addMiddle: "＋ thinking を追加",
+  },
+  negative: {
+    input: "<input>",
+    middle: "<why wrong>",
+    output: "<bad output>",
+    addMiddle: "＋ なぜダメかを追加",
+    middleHint: "なぜこの出力がダメなのか",
+  },
 };
 
 export default function ExampleCard({ example, index, total, onChange, onDelete, onMove }: Props) {
@@ -23,6 +37,8 @@ export default function ExampleCard({ example, index, total, onChange, onDelete,
   const kind: ExampleKind = example.kind ?? "positive";
   const labels = LABELS[kind];
   const number = index + 1;
+  // 中身があるなら、フラグの有無にかかわらず必ず見せる（値が隠れて消えないように）。
+  const showMiddle = example.showThinking === true || example.thinking.trim() !== "";
 
   return (
     <section
@@ -99,13 +115,35 @@ export default function ExampleCard({ example, index, total, onChange, onDelete,
             value={example.input}
             onChange={(input) => onChange({ input })}
           />
-          <AutoTextarea
-            variant="onCard"
-            label={labels.middle}
-            value={example.thinking}
-            placeholder={kind === "negative" ? "なぜこの出力がダメなのか" : undefined}
-            onChange={(thinking) => onChange({ thinking })}
-          />
+
+          {showMiddle ? (
+            <div className="optional-field">
+              <AutoTextarea
+                variant="onCard"
+                label={labels.middle}
+                value={example.thinking}
+                placeholder={labels.middleHint}
+                onChange={(thinking) => onChange({ thinking })}
+              />
+              <button
+                type="button"
+                className="icon-button icon-button-danger optional-remove"
+                aria-label={`example ${number} の ${labels.middle} を削除`}
+                onClick={() => onChange({ thinking: "", showThinking: false })}
+              >
+                ✕
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="add-child"
+              onClick={() => onChange({ showThinking: true })}
+            >
+              {labels.addMiddle}
+            </button>
+          )}
+
           <AutoTextarea
             variant="onCard"
             label={labels.output}
