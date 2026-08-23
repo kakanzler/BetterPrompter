@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildOutputConfig, parseSchema, SCHEMA_TEMPLATE } from "./outputConfig";
-import { defaultDraft } from "./types";
+import { defaultDraft } from "./sections";
 import type { PromptDraft } from "./types";
 
 function draft(overrides: Partial<PromptDraft> = {}): PromptDraft {

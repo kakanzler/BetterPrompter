@@ -7,22 +7,45 @@ import {
   hasTagCollision,
   sanitizeTag,
 } from "./buildPrompt";
-import { defaultDraft, emptyDocument, emptyExample } from "./types";
-import type { CustomNode, PromptDraft } from "./types";
+import { emptyDocument, emptyExample } from "./types";
+import { defaultDraft, makeSection } from "./sections";
+import type { CustomNode, PromptDraft, Section } from "./types";
 
 // 既存テストは user ターンだけを見ているので、薄いラッパで包む。
 function buildPrompt(input: PromptDraft): string {
   return buildFull(input).user;
 }
 
+/**
+ * 既存テストは「値を入れたセクションが出力に出る」前提で書かれているので、
+ * sections を明示しない限り、中身から標準的な並びを自動で組み立てる。
+ * 実入力の枠はテストごとに要否が違うため、既定では入れない。
+ */
 function draft(overrides: Partial<PromptDraft> = {}): PromptDraft {
-  return { ...defaultDraft(), includeRealInput: false, ...overrides };
+  const base = { ...defaultDraft(), ...overrides };
+  if (overrides.sections) return base;
+
+  const sections: Section[] = [];
+  if (base.role) sections.push(makeSection("role", "role"));
+  if (base.documents.length) sections.push(makeSection("documents", "documents"));
+  if (base.instruction) sections.push(makeSection("instruction", "instruction"));
+  if (base.constraints.length) sections.push(makeSection("constraints", "constraints"));
+  for (const node of base.customSections) sections.push(makeSection("custom", node.id));
+  if (base.examples.length) sections.push(makeSection("examples", "examples"));
+  if (base.outputSchema) sections.push(makeSection("outputSchema", "outputSchema"));
+  return { ...base, sections };
+}
+
+/** 末尾に実入力の枠カードを足した下書き。 */
+function withRealInput(overrides: Partial<PromptDraft> = {}): PromptDraft {
+  const base = draft(overrides);
+  return { ...base, sections: [...base.sections, makeSection("realInput", "realInput")] };
 }
 
 describe("buildPrompt", () => {
   it("何も入力がなければ空文字列を返す", () => {
     expect(buildPrompt(draft())).toBe("");
-    expect(buildPrompt(draft({ includeRealInput: true }))).toBe("");
+    expect(buildPrompt(withRealInput())).toBe("");
   });
 
   it("Instruction だけなら instructions ブロックだけを出す", () => {
@@ -76,8 +99,8 @@ describe("buildPrompt", () => {
     expect(result.match(/<example>/g)).toHaveLength(2);
   });
 
-  it("includeRealInput で末尾に実入力の枠を付ける", () => {
-    const result = buildPrompt(draft({ instruction: "要約する", includeRealInput: true }));
+  it("実入力の枠カードがあれば末尾に付く", () => {
+    const result = buildPrompt(withRealInput({ instruction: "要約する" }));
     expect(result.endsWith("Now here is the real input.\n\n<input>\n{{INPUT}}\n</input>")).toBe(true);
   });
 
@@ -119,8 +142,8 @@ describe("estimateTokens", () => {
 });
 
 describe("カスタムタグのセクション", () => {
-  function node(tag: string, content = "", children: CustomNode[] = [], placement?: "before" | "after"): CustomNode {
-    return { id: tag, tag, content, children, placement };
+  function node(tag: string, content = "", children: CustomNode[] = []): CustomNode {
+    return { id: tag, tag, content, children };
   }
 
   it("タグ名が空のノードは出力しない", () => {
@@ -157,32 +180,49 @@ describe("カスタムタグのセクション", () => {
     expect(buildPrompt(draft({ customSections: [tree] }))).not.toContain("<empty>");
   });
 
-  it("placement で examples の前後に振り分ける", () => {
+  it("カード順どおりに examples の前後へ置ける", () => {
     const result = buildPrompt(
       draft({
         instruction: "要約する",
         examples: [{ ...emptyExample("a"), input: "本文" }],
-        customSections: [
-          node("output_format", "箇条書き", [], "after"),
-          node("context", "背景", [], "before"),
+        customSections: [node("context", "背景"), node("output_format", "箇条書き")],
+        sections: [
+          makeSection("instruction", "instruction"),
+          makeSection("custom", "context"),
+          makeSection("examples", "examples"),
+          makeSection("custom", "output_format"),
         ],
       }),
     );
+    expect(result.indexOf("<instructions>")).toBeLessThan(result.indexOf("<context>"));
     expect(result.indexOf("<context>")).toBeLessThan(result.indexOf("<examples>"));
     expect(result.indexOf("<examples>")).toBeLessThan(result.indexOf("<output_format>"));
-    expect(result.indexOf("<instructions>")).toBeLessThan(result.indexOf("<context>"));
   });
 
-  it("placement 未指定は before として扱う", () => {
-    const result = buildPrompt(
-      draft({ examples: [{ ...emptyExample("a"), input: "本文" }], customSections: [node("context", "背景")] }),
+  it("同じ中身でもカードを入れ替えれば順番が変わる", () => {
+    const shared = {
+      examples: [{ ...emptyExample("a"), input: "本文" }],
+      customSections: [node("context", "背景")],
+    };
+    const before = buildPrompt(
+      draft({
+        ...shared,
+        sections: [makeSection("custom", "context"), makeSection("examples", "examples")],
+      }),
     );
-    expect(result.indexOf("<context>")).toBeLessThan(result.indexOf("<examples>"));
+    const after = buildPrompt(
+      draft({
+        ...shared,
+        sections: [makeSection("examples", "examples"), makeSection("custom", "context")],
+      }),
+    );
+    expect(before.indexOf("<context>")).toBeLessThan(before.indexOf("<examples>"));
+    expect(after.indexOf("<examples>")).toBeLessThan(after.indexOf("<context>"));
   });
 
   it("カスタムセクションだけでも実入力の枠が付く", () => {
     const result = buildPrompt(
-      draft({ customSections: [node("context", "背景")], includeRealInput: true }),
+      withRealInput({ customSections: [node("context", "背景")] }),
     );
     expect(result.endsWith("<input>\n{{INPUT}}\n</input>")).toBe(true);
   });
@@ -370,7 +410,7 @@ describe("長文ドキュメント", () => {
   });
 });
 
-describe("long-context モード", () => {
+describe("カード順が出力順になる", () => {
   const base = {
     instruction: "要約する",
     constraints: ["200字以内"],
@@ -378,26 +418,70 @@ describe("long-context モード", () => {
     documents: [{ ...emptyDocument("d"), source: "a.md", content: "資料" }],
   };
 
-  it("OFF なら instructions は examples より前", () => {
+  /** 旧 long-context モード相当 — 指示まわりを examples の後ろへ回した並び。 */
+  const tailDirectives = [
+    makeSection("documents", "documents"),
+    makeSection("examples", "examples"),
+    makeSection("instruction", "instruction"),
+    makeSection("constraints", "constraints"),
+    makeSection("realInput", "realInput"),
+  ];
+
+  it("既定の並びでは instructions が examples より前", () => {
     const result = buildPrompt(draft(base));
     expect(result.indexOf("<instructions>")).toBeLessThan(result.indexOf("<examples>"));
   });
 
-  it("ON で指示まわりがまとめて examples の後ろへ動く", () => {
-    const result = buildPrompt(draft({ ...base, longContextMode: true }));
+  it("指示カードを下へ動かせば examples の後ろに出る", () => {
+    const result = buildPrompt(draft({ ...base, sections: tailDirectives }));
     const examples = result.indexOf("<examples>");
     expect(examples).toBeLessThan(result.indexOf("<instructions>"));
     expect(examples).toBeLessThan(result.indexOf("<constraints>"));
   });
 
-  it("ON でもドキュメントは先頭のまま", () => {
-    const result = buildPrompt(draft({ ...base, longContextMode: true }));
+  it("先頭に置いたドキュメントは先頭のまま", () => {
+    const result = buildPrompt(draft({ ...base, sections: tailDirectives }));
     expect(result.indexOf("<documents>")).toBe(0);
   });
 
-  it("ON でも実入力の枠は最後", () => {
-    const result = buildPrompt(draft({ ...base, longContextMode: true, includeRealInput: true }));
+  it("末尾に置いた実入力の枠は最後に出る", () => {
+    const result = buildPrompt(draft({ ...base, sections: tailDirectives }));
     expect(result.endsWith("<input>\n{{INPUT}}\n</input>")).toBe(true);
+  });
+
+  it("role と outputSchema はどこに置いても user ターンに出ない", () => {
+    const result = buildPrompt(
+      draft({
+        role: "編集者",
+        instruction: "要約する",
+        outputSchema: '{"type":"object"}',
+        sections: [
+          makeSection("role", "role"),
+          makeSection("outputSchema", "outputSchema"),
+          makeSection("instruction", "instruction"),
+        ],
+      }),
+    );
+    expect(result).toBe("<instructions>\n要約する\n</instructions>");
+  });
+
+  it("実入力の枠カードが無ければ {{INPUT}} は出ない", () => {
+    expect(buildPrompt(draft({ instruction: "要約する" }))).not.toContain("{{INPUT}}");
+  });
+
+  it("カードはあっても中身が空なら出力に出ない", () => {
+    const result = buildPrompt(
+      draft({
+        instruction: "要約する",
+        sections: [
+          makeSection("instruction", "instruction"),
+          makeSection("constraints", "constraints"),
+          makeSection("examples", "examples"),
+          makeSection("documents", "documents"),
+        ],
+      }),
+    );
+    expect(result).toBe("<instructions>\n要約する\n</instructions>");
   });
 });
 
@@ -408,7 +492,12 @@ describe("blocks（トークン内訳の材料）", () => {
         instruction: "要約する",
         constraints: ["200字以内"],
         examples: [{ ...emptyExample("g"), input: "本文" }],
-        includeRealInput: true,
+        sections: [
+          makeSection("instruction", "instruction"),
+          makeSection("constraints", "constraints"),
+          makeSection("examples", "examples"),
+          makeSection("realInput", "realInput"),
+        ],
       }),
     );
     expect(built.blocks.map((b) => b.label)).toEqual([

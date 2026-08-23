@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { lintDraft } from "./lint";
-import { defaultDraft, emptyExample } from "./types";
+import { emptyExample } from "./types";
+import { defaultDraft } from "./sections";
 import type { PromptDraft } from "./types";
 
 function draft(overrides: Partial<PromptDraft> = {}): PromptDraft {
-  return { ...defaultDraft(), includeRealInput: false, ...overrides };
+  return { ...defaultDraft(), ...overrides };
 }
 
 function ids(overrides: Partial<PromptDraft> = {}): string[] {
@@ -75,15 +76,6 @@ describe("lintDraft", () => {
     expect(found).not.toContain("no-output-format");
   });
 
-  it("長いのに long-context モードが OFF なら知らせる", () => {
-    expect(ids(clean({ instruction: "あ".repeat(40_000) }))).toContain("long-context-off");
-  });
-
-  it("long-context モードが ON なら黙る", () => {
-    const found = ids(clean({ instruction: "あ".repeat(40_000), longContextMode: true }));
-    expect(found).not.toContain("long-context-off");
-  });
-
   it("トップレベルのタグ名が重複したら知らせる", () => {
     const findings = lintDraft(
       draft(
@@ -127,7 +119,6 @@ describe("unset-variable の INPUT 除外", () => {
         { ...emptyExample("b"), input: "本文B", idealOutput: "要約B" },
         { ...emptyExample("c"), input: "本文C", idealOutput: "要約C" },
       ],
-      includeRealInput: true,
     });
     expect(findings.map((f) => f.id)).not.toContain("unset-variable");
   });
@@ -142,7 +133,6 @@ describe("unset-variable の INPUT 除外", () => {
         { ...emptyExample("b"), input: "本文B", idealOutput: "要約B" },
         { ...emptyExample("c"), input: "本文C", idealOutput: "要約C" },
       ],
-      includeRealInput: true,
     });
     const target = findings.find((f) => f.id === "unset-variable");
     expect(target?.message).toBe("テスト値が未設定の変数があります: {{TOPIC}}");
@@ -208,6 +198,7 @@ describe("出しすぎない Lint", () => {
       expect(found).not.toContain("example-thinking-redundant");
       expect(found).not.toContain("prefill-trailing-space");
       expect(found).not.toContain("thinking-without-cot");
+      expect(found).not.toContain("long-context-off");
     }
   });
 });

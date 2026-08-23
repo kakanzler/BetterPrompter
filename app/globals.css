@@ -15,6 +15,12 @@
 
   --radius-input: 10px;
   --radius-card: 24px;
+
+  /* Neon Glass の色味（CodePen の --hue1 / --hue2 に相当） */
+  --hue1: 255;
+  --hue2: 222;
+  --radius: 22px;
+  --ease: cubic-bezier(0.5, 1, 0.89, 1);
   --font-ui: "Segoe UI", "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN",
     "Yu Gothic UI", Meiryo, sans-serif;
   --font-mono: "Cascadia Code", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
@@ -31,7 +37,13 @@ body {
 }
 
 body {
-  background: var(--bg);
+  /* グラスを効かせるための下地。外部画像には依存しない。 */
+  background-color: #14161d;
+  background-image:
+    radial-gradient(60rem 40rem at 12% -10%, hsl(var(--hue1) 60% 30% / 0.45), transparent 60%),
+    radial-gradient(50rem 36rem at 88% 8%, hsl(var(--hue2) 65% 32% / 0.4), transparent 62%),
+    radial-gradient(48rem 40rem at 50% 108%, hsl(285 55% 30% / 0.35), transparent 60%);
+  background-attachment: fixed;
   color: var(--text);
   font-family: var(--font-ui);
   -webkit-font-smoothing: antialiased;
@@ -1013,5 +1025,305 @@ textarea::placeholder {
     max-height: none;
     overflow-y: visible;
     padding-right: 0;
+  }
+}
+
+/* ---------- グラスのペインとカード ---------- */
+
+.pane {
+  border-radius: var(--radius-card);
+  border: 1px solid hsl(var(--hue2) 14% 26% / 0.7);
+  padding: 20px;
+  /* ペイン側は薄い塗りだけにする。ぼかしを二重に掛けると重い。 */
+  background: linear-gradient(hsl(var(--hue2) 20% 8% / 0.42), hsl(var(--hue1) 20% 8% / 0.42));
+  box-shadow:
+    0 10px 16px -8px rgb(3 3 8 / 0.7),
+    0 20px 36px -14px rgb(5 7 15 / 0.7);
+}
+
+.pane-hint {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--muted);
+  opacity: 0.7;
+}
+
+.pane-empty {
+  margin: 0;
+  padding: 28px 16px;
+  text-align: center;
+  font-size: 0.85rem;
+  line-height: 1.8;
+  color: var(--muted);
+  border: 1px dashed hsl(var(--hue2) 14% 34% / 0.8);
+  border-radius: var(--radius);
+}
+
+.section-card {
+  position: relative;
+  border-radius: var(--radius);
+  border: 1px solid hsl(var(--hue2) 12% 28% / 0.8);
+  background:
+    linear-gradient(235deg, hsl(var(--hue1) 50% 12% / 0.7), hsl(var(--hue1) 50% 12% / 0) 40%),
+    linear-gradient(45deg, hsl(var(--hue2) 50% 10% / 0.7), hsl(var(--hue2) 50% 10% / 0) 40%),
+    linear-gradient(hsl(220 14% 7% / 0.62));
+  backdrop-filter: blur(10px);
+  padding: 12px 18px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: border-color 0.15s var(--ease), transform 0.15s var(--ease);
+}
+
+.section-card:hover {
+  border-color: hsl(var(--hue1) 30% 42% / 0.8);
+}
+
+.section-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.section-card-title {
+  font-size: 1rem;
+  color: var(--text);
+}
+
+.section-card-note {
+  font-size: 0.68rem;
+  color: var(--muted);
+  opacity: 0.75;
+}
+
+.section-card-actions {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.section-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.drag-handle {
+  cursor: grab;
+  color: var(--muted);
+  opacity: 0.6;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0 2px;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+.section-card-dragging {
+  opacity: 0.45;
+}
+
+/* 差し込み位置を上端のラインで示す。 */
+.section-card-drop::before {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  top: -7px;
+  height: 2px;
+  border-radius: 2px;
+  background: hsl(var(--hue1) 90% 70%);
+  box-shadow: 0 0 10px 1px hsl(var(--hue1) 90% 60% / 0.9);
+}
+
+.real-input-note {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.7;
+  color: var(--muted);
+}
+
+.real-input-note code {
+  font-family: var(--font-mono);
+  color: var(--text);
+}
+
+/* ---------- 右クリックのネオングラスメニュー ---------- */
+
+.neon-menu {
+  position: fixed;
+  z-index: 50;
+  width: 275px;
+  padding: 16px;
+  border-radius: var(--radius);
+  border: 1px solid hsl(var(--hue2) 12% 20%);
+  background:
+    linear-gradient(235deg, hsl(var(--hue1) 50% 10% / 0.8), hsl(var(--hue1) 50% 10% / 0) 33%),
+    linear-gradient(45deg, hsl(var(--hue2) 50% 10% / 0.8), hsl(var(--hue2) 50% 10% / 0) 33%),
+    linear-gradient(hsl(220 20% 5% / 0.66));
+  backdrop-filter: blur(12px);
+  box-shadow:
+    0 10px 16px -8px rgb(3 3 8),
+    0 20px 36px -14px rgb(5 7 15);
+  animation: neon-in 0.16s var(--ease);
+}
+
+@keyframes neon-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+}
+
+/* 縁の光は本体ではなく装飾レイヤで作る（CodePen と同じ手）。 */
+.neon-menu .shine,
+.neon-menu .glow {
+  position: absolute;
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+.neon-menu .shine {
+  inset: 0;
+  padding: 1px;
+  background: linear-gradient(
+    var(--shine-deg, 180deg),
+    hsl(var(--hue1) 100% 80% / 0.9),
+    transparent 45%
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0.7;
+}
+
+.neon-menu .shine-bottom {
+  --shine-deg: 0deg;
+  background: linear-gradient(0deg, hsl(var(--hue2) 100% 80% / 0.8), transparent 45%);
+}
+
+.neon-menu .glow {
+  inset: -12px;
+  filter: blur(14px) saturate(1.25) brightness(0.6);
+  opacity: 0.75;
+}
+
+.neon-menu .glow-top {
+  background: linear-gradient(180deg, hsl(var(--hue1) 100% 60% / 0.55), transparent 40%);
+}
+
+.neon-menu .glow-bottom {
+  background: linear-gradient(0deg, hsl(var(--hue2) 100% 60% / 0.5), transparent 40%);
+}
+
+.neon-inner {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.neon-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  border-radius: 12px;
+  border: 1px solid hsl(var(--hue2) 12% 24%);
+  color: var(--muted);
+}
+
+.neon-search input {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+}
+
+.neon-search input::placeholder {
+  color: hsl(var(--hue2) 10% 45%);
+  font-style: italic;
+}
+
+.neon-group {
+  margin: 8px 0 4px;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  color: hsl(var(--hue2) 10% 48%);
+}
+
+.neon-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 10px;
+  background: none;
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s var(--ease);
+}
+
+.neon-item:hover:not(:disabled),
+.neon-item:focus-visible:not(:disabled) {
+  background: hsl(var(--hue1) 40% 40% / 0.22);
+}
+
+.neon-item:disabled {
+  opacity: 0.38;
+  cursor: default;
+}
+
+.neon-item-accent {
+  color: hsl(var(--hue1) 100% 84%);
+}
+
+.neon-glyph {
+  width: 1.2em;
+  flex: none;
+  text-align: center;
+  opacity: 0.85;
+}
+
+.neon-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.neon-hint {
+  font-size: 0.68rem;
+  color: var(--muted);
+  opacity: 0.8;
+}
+
+.neon-empty {
+  margin: 8px 0 2px;
+  padding: 4px 10px;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+@media (max-width: 600px) {
+  .pane {
+    padding: 14px;
+  }
+
+  .section-card {
+    padding: 10px 14px 14px;
   }
 }

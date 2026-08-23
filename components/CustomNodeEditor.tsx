@@ -2,7 +2,7 @@
 
 import AutoTextarea from "./AutoTextarea";
 import { sanitizeTag } from "@/lib/buildPrompt";
-import type { CustomNode, Placement } from "@/lib/types";
+import type { CustomNode } from "@/lib/types";
 
 type Props = {
   node: CustomNode;
@@ -66,21 +66,6 @@ export default function CustomNodeEditor({
 
         {showsRewrite && <span className="tag-hint">→ &lt;{sanitized}&gt;</span>}
 
-        {depth === 0 && (
-          <label className="placement">
-            <span className="placement-caption">examples の</span>
-            <select
-              value={node.placement ?? "before"}
-              aria-label="examples の前後どちらに置くか"
-              onChange={(event) =>
-                onChange(node.id, { placement: event.target.value as Placement })
-              }
-            >
-              <option value="before">前</option>
-              <option value="after">後</option>
-            </select>
-          </label>
-        )}
 
         <div className="custom-node-actions">
           <button

@@ -1,4 +1,4 @@
-import { buildPrompt, estimateTokens, sanitizeTag } from "./buildPrompt";
+import { sanitizeTag } from "./buildPrompt";
 import { parseSchema } from "./outputConfig";
 import { extractVariables } from "./variables";
 import type { Example, PromptDraft } from "./types";
@@ -14,9 +14,6 @@ export type LintFinding = {
 
 /** これを下回る指示は曖昧すぎる可能性が高い、という目安。 */
 const VAGUE_INSTRUCTION_CHARS = 15;
-
-/** 指示を末尾に寄せる効果が出はじめるおおよその境目。 */
-const LONG_CONTEXT_TOKENS = 20_000;
 
 /** 出力形式を指定していると判断するタグ名。 */
 const FORMAT_TAGS = ["output_format", "format", "response_format", "output", "schema"];
@@ -50,7 +47,6 @@ export function lintDraft(draft: PromptDraft): LintFinding[] {
   if (isBlank(draft)) return [];
 
   const findings: LintFinding[] = [];
-  const built = buildPrompt(draft);
 
   if (!draft.instruction.trim()) {
     findings.push({
@@ -108,15 +104,6 @@ export function lintDraft(draft: PromptDraft): LintFinding[] {
       severity: "info",
       message: "出力形式の指定がありません",
       hint: "JSON がほしいなら Output schema（structured outputs）が確実です。文章なら constraints でも足ります。",
-    });
-  }
-
-  if (!draft.longContextMode && estimateTokens(built.user) > LONG_CONTEXT_TOKENS) {
-    findings.push({
-      id: "long-context-off",
-      severity: "info",
-      message: "プロンプトが長いのに long-context モードが OFF です",
-      hint: "長文では指示を末尾に寄せたほうが、指示を取りこぼしにくくなります。",
     });
   }
 

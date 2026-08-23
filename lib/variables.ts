@@ -40,8 +40,8 @@ export function extractVariables(draft: PromptDraft): string[] {
   }
   collectNodes(draft.customSections, found);
 
-  // 実入力の枠は常に {{INPUT}} を出すので、トグルが ON なら候補に含める。
-  if (draft.includeRealInput) found.add("INPUT");
+  // 実入力の枠カードがあれば {{INPUT}} が必ず出るので、候補に含める。
+  if (draft.sections.some((section) => section.kind === "realInput")) found.add("INPUT");
 
   return [...found];
 }

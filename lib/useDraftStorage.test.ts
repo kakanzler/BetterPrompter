@@ -22,13 +22,11 @@ describe("normalizeDraft の後方互換", () => {
     expect(restored?.draft.instruction).toBe("記事を3行で要約してください。");
     expect(restored?.draft.examples).toHaveLength(1);
     expect(restored?.draft.customSections[0].tag).toBe("context");
-    expect(restored?.draft.includeRealInput).toBe(true);
   });
 
   it("欠けている新キーを既定値で埋める", () => {
     const restored = normalizeDraft(LEGACY_DRAFT);
     expect(restored?.draft.role).toBe("");
-    expect(restored?.draft.longContextMode).toBe(false);
     expect(restored?.draft.constraints).toEqual([]);
     expect(restored?.draft.documents).toEqual([]);
     expect(restored?.draft.variableValues).toEqual({});
@@ -118,5 +116,82 @@ describe("normalizeDraft の防御", () => {
       depth += 1;
     }
     expect(depth).toBeLessThanOrEqual(21);
+  });
+});
+
+describe("sections への移行", () => {
+  /** 旧仕様の並びは documents → 指示まわり → custom(before) → examples → custom(after) → 実入力。 */
+  const OLD_FULL = {
+    role: "編集者",
+    instruction: "要約する",
+    constraints: ["200字以内"],
+    documents: [{ id: "d", source: "a.md", content: "資料" }],
+    examples: [{ id: "e", input: "本文", thinking: "", idealOutput: "要約" }],
+    customSections: [
+      { id: "ctx", tag: "context", content: "背景", children: [], placement: "before" },
+      { id: "fmt", tag: "output_format", content: "箇条書き", children: [], placement: "after" },
+    ],
+    outputSchema: '{"type":"object"}',
+    includeRealInput: true,
+  };
+
+  const kinds = (value: unknown) =>
+    normalizeDraft(value)?.draft.sections.map((s) => `${s.kind}:${s.id}`);
+
+  it("旧仕様と同じ並びを組み立てる", () => {
+    expect(kinds(OLD_FULL)).toEqual([
+      "role:role",
+      "documents:documents",
+      "instruction:instruction",
+      "constraints:constraints",
+      "custom:ctx",
+      "examples:examples",
+      "custom:fmt",
+      "outputSchema:outputSchema",
+      "realInput:realInput",
+    ]);
+  });
+
+  it("longContextMode が true なら指示まわりが examples の後ろへ回る", () => {
+    const result = kinds({ ...OLD_FULL, longContextMode: true })!;
+    expect(result.indexOf("examples:examples")).toBeLessThan(result.indexOf("instruction:instruction"));
+    expect(result.indexOf("examples:examples")).toBeLessThan(result.indexOf("constraints:constraints"));
+    // ドキュメントは先頭のまま。
+    expect(result.indexOf("documents:documents")).toBeLessThan(result.indexOf("examples:examples"));
+  });
+
+  it("includeRealInput が false なら実入力の枠を作らない", () => {
+    expect(kinds({ ...OLD_FULL, includeRealInput: false })).not.toContain("realInput:realInput");
+  });
+
+  it("中身の無いセクションはカードを作らない", () => {
+    expect(kinds({ instruction: "要約する" })).toEqual([
+      "role:role",
+      "instruction:instruction",
+      "realInput:realInput",
+    ]);
+  });
+
+  it("保存済みの sections はそのまま尊重する", () => {
+    const saved = {
+      ...OLD_FULL,
+      sections: [
+        { id: "examples", kind: "examples" },
+        { id: "instruction", kind: "instruction" },
+      ],
+    };
+    expect(kinds(saved)).toEqual(["examples:examples", "instruction:instruction"]);
+  });
+
+  it("知らない kind と、対応ノードが無い custom は捨てる", () => {
+    const saved = {
+      ...OLD_FULL,
+      sections: [
+        { id: "instruction", kind: "instruction" },
+        { id: "bogus", kind: "bogus" },
+        { id: "missing-node", kind: "custom" },
+      ],
+    };
+    expect(kinds(saved)).toEqual(["instruction:instruction"]);
   });
 });

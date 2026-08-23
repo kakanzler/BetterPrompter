@@ -8,8 +8,8 @@ XML タグで囲む——といった定型作業を UI で埋めるだけで、
 
 **現行の Claude（Opus 5 / Sonnet 5 / Fable 5 / 4.6 以降）を前提にしています。**
 出力そのものは XML なので他社モデルにも貼れますが、`output_config` は Claude 固有の
-API パラメータで、long-context モードの並べ替えも Anthropic のガイダンスに沿っています
-（OpenAI は逆に「指示は先頭」を推奨）。
+API パラメータです。並び順は自分で決められますが、既定の recommend 構成は
+Anthropic のガイダンス（長文資料は先頭）に沿っています。
 
 ## 生成されるプロンプト
 
@@ -90,20 +90,27 @@ Now here is the real input.
 - **Role / System** — 役割を system ターンに渡す
 - **Instruction** — やってほしいことを先頭に置く
 - **constraints** — 守ってほしい条件を箇条書きで `<constraints>` に構造化
-- **documents** — 長文資料を Anthropic 推奨の `<document index="N">` 形式でプロンプト先頭に配置
-- **long-context モード** — 資料が長いとき、指示を example の後ろ（末尾寄り）へ移す
+- **documents** — 長文資料を Anthropic 推奨の `<document index="N">` 形式で出力する
 - **example（良い例 / 悪い例）** — 既定は0件で、必要なときに足す。
   悪い例は `<negative_examples>` に分け、フィールドを `<why_wrong>` / `<bad_output>` に読み替える。
   `<thinking>`（悪い例では「なぜダメか」）も既定では出さず、`＋` で足す形
-- **custom tags** — 任意の XML タグを無制限にネスト（examples の前後を選択可）
+- **custom tag** — 任意の XML タグを無制限にネスト。1本＝カード1枚なので、
+  examples の前にも後ろにも自由に置ける
 - **Output schema** — structured outputs（`output_config.format`）で出力の形を確実に固定する。
   `effort` で思考の深さも指定できる
 - **variables** — `{{名前}}` を自動検出し、テスト値を当てた完成形をプレビュー
 
 ### 画面
 
-左が入力、右が生成結果と Copy ボタン。右カラムは貼り付いて追従するので、
-書きながら出力を見られる。900px 以下では1カラムに折り返す。
+左が入力、右が生成結果と Copy ボタン。どちらも半透明のグラスカードで、
+右カラムは貼り付いて追従する。900px 以下では1カラムに折り返す。
+
+左ペインの各セクションもカードで、**並び順がそのまま出力順**になる。
+ドラッグハンドル（⠿）か ▲▼ で並べ替えられる。
+
+**カードの追加は左ペインの右クリック**から行う。`recommend` を選ぶと
+よく使う構成（Role / documents / Instruction / constraints / example /
+Output schema / 実入力）が一度に揃う。初期状態は Role / Instruction / 実入力の3枚。
 
 ### 支援機能
 
@@ -119,7 +126,7 @@ Now here is the real input.
 ## カスタムタグ
 
 `+ add custom tag` から任意の XML タグを追加でき、`+ 入れ子タグを追加` でいくらでもネストできる。
-セクションごとに `examples の前 / 後` を選べるので、背景は前、出力形式は後ろ、と置き分けられる。
+カード1枚がタグ1本なので、背景は examples の前、出力形式は後ろ、と並べ替えで置き分けられる。
 
 ```
 <context>                       ← examples の「前」
@@ -154,12 +161,13 @@ npm run build
 |---|---|
 | `app/page.tsx` | 状態オーナー。下書き全体を保持し、子コンポーネントへ渡す |
 | `lib/buildPrompt.ts` | 下書き → System / User の純粋関数。出力仕様の単一の真実の源 |
+| `lib/sections.ts` | カード種別のカタログ、既定の並び、recommend の構成 |
 | `lib/lint.ts` | 下書きの静的チェック。外部通信もモデル呼び出しもしない |
 | `lib/outputConfig.ts` | JSON Schema の検証と `output_config` の組み立て |
 | `lib/variables.ts` | `{{VAR}}` の検出とテスト値の適用 |
 | `lib/tree.ts` | カスタムタグのツリー操作（更新 / 削除 / 並べ替え / 子の追加） |
 | `lib/useDraftStorage.ts` | localStorage 永続化 + 外部 JSON の正規化（旧形式との互換もここ） |
-| `components/` | ExampleCard / DocumentCard / CustomNodeEditor / ConstraintList / OutputSchemaEditor / VariablePanel / LintPanel / MigrationNotice / AutoTextarea / OutputPanel |
+| `components/` | SectionCard / ContextMenu / ExampleCard / DocumentCard / CustomNodeEditor / ConstraintList / OutputSchemaEditor / VariablePanel / LintPanel / MigrationNotice / AutoTextarea / OutputPanel |
 | `specification/UI.png` | 元になった UI デザイン |
 
 ## Assistant prefill を外した理由
@@ -185,3 +193,13 @@ prefill 入りの下書きを読み込むと、内容を提示したうえでこ
 
 example の `<thinking>` 欄も既定では出さない。使いたいときだけ `＋ thinking を追加` で足す。
 `chainOfThought` を持つ古い下書きを読み込んでも壊れず、その項目は無視される。
+
+## 並び順について
+
+`sections` がカードの並びを持ち、`buildPrompt` はそれを上から走査して user ターンを組む。
+**Role は system ターン、Output schema は `output_config`** に入るため、この2枚だけは
+並び順が出力に影響しない（カード上にもその旨を出している）。
+
+`sections` を持たない古い下書きを読むと、旧仕様（documents は常に先頭、
+`longContextMode` で指示が末尾へ、カスタムタグの `placement` で前後に振り分け）と
+**同じ出力になる並び**を合成して復元する。

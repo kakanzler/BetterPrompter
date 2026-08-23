@@ -1,4 +1,4 @@
-import type { CustomNode, Example, Placement, PromptDraft } from "./types";
+import type { CustomNode, Example, PromptDraft, Section } from "./types";
 
 /** 末尾に置く実入力ブロックの差し替え用プレースホルダ。 */
 export const REAL_INPUT_PLACEHOLDER = "{{INPUT}}";
@@ -63,10 +63,7 @@ function indent(text: string): string {
 export function sanitizeTag(raw: string): string {
   const collapsed = raw.trim().replace(/\s+/g, "_");
   // 英数字・アンダースコア・ハイフン・ドット、および日本語を許可する。
-  const stripped = collapsed.replace(
-    /[^A-Za-z0-9_.\-぀-ゟ゠-ヿ一-鿿]/g,
-    "",
-  );
+  const stripped = collapsed.replace(/[^A-Za-z0-9_.\-぀-ゟ゠-ヿ一-鿿]/g, "");
   if (!stripped) return "";
   // XML の要素名は数字・ハイフン・ドットで始められない。
   return /^[0-9.\-]/.test(stripped) ? `_${stripped}` : stripped;
@@ -89,17 +86,6 @@ function buildNode(node: CustomNode): string | null {
 
   const inner = [...(content ? [content] : []), ...children].join("\n");
   return block(tag, indent(inner));
-}
-
-function sectionsFor(draft: PromptDraft, placement: Placement): PromptBlock[] {
-  return draft.customSections
-    .filter((section) => (section.placement ?? "before") === placement)
-    .map((section) => ({ node: section, text: buildNode(section) }))
-    .filter((entry): entry is { node: CustomNode; text: string } => entry.text !== null)
-    .map((entry) => ({
-      label: `<${sanitizeTag(entry.node.tag)}>`,
-      text: entry.text,
-    }));
 }
 
 /** 良い例。3項目すべて空なら null。 */
@@ -133,7 +119,7 @@ function buildNegativeExample(example: Example): string | null {
   return parts.length > 0 ? block("negative_example", parts.join("\n")) : null;
 }
 
-function buildDocuments(draft: PromptDraft): string | null {
+function buildDocuments(draft: PromptDraft): PromptBlock[] {
   const entries: string[] = [];
   for (const document of draft.documents) {
     const content = document.content.trim();
@@ -150,34 +136,23 @@ function buildDocuments(draft: PromptDraft): string | null {
       blockWithAttrs("document", { index: String(entries.length + 1) }, parts.join("\n")),
     );
   }
-  return entries.length > 0 ? block("documents", entries.join("\n")) : null;
+  if (entries.length === 0) return [];
+  return [{ label: "<documents>", text: block("documents", entries.join("\n")) }];
 }
 
-function buildConstraints(draft: PromptDraft): string | null {
+function buildConstraints(draft: PromptDraft): PromptBlock[] {
   const items = draft.constraints.map((item) => item.trim()).filter(Boolean);
-  if (items.length === 0) return null;
+  if (items.length === 0) return [];
   // 1行1要素をタグで包むより箇条書きのほうが短く、伝わり方は変わらない。
-  return block("constraints", items.map((item) => `- ${item}`).join("\n"));
+  return [
+    {
+      label: "<constraints>",
+      text: block("constraints", items.map((item) => `- ${item}`).join("\n")),
+    },
+  ];
 }
 
-/**
- * 下書きから XML 構造化プロンプトを組み立てる。
- * 空のフィールドはタグごと省略し、中身が何もなければ user は空文字列になる。
- */
-export function buildPrompt(draft: PromptDraft): BuiltPrompt {
-  const documents = buildDocuments(draft);
-  const instruction = draft.instruction.trim();
-  const constraints = buildConstraints(draft);
-
-  // 指示まわりのブロック。long-context モードでは examples の後ろへ丸ごと動く。
-  const directives: PromptBlock[] = [];
-  if (instruction) {
-    directives.push({ label: "<instructions>", text: block("instructions", instruction) });
-  }
-  if (constraints) {
-    directives.push({ label: "<constraints>", text: constraints });
-  }
-
+function buildExamples(draft: PromptDraft): PromptBlock[] {
   const positives = draft.examples
     .filter((example) => (example.kind ?? "positive") === "positive")
     .map(buildPositiveExample)
@@ -188,38 +163,76 @@ export function buildPrompt(draft: PromptDraft): BuiltPrompt {
     .map(buildNegativeExample)
     .filter((text): text is string => text !== null);
 
-  const exampleBlocks: PromptBlock[] = [];
+  const blocks: PromptBlock[] = [];
   if (positives.length > 0) {
-    exampleBlocks.push({ label: "<examples>", text: block("examples", positives.join("\n")) });
+    blocks.push({ label: "<examples>", text: block("examples", positives.join("\n")) });
   }
   if (negatives.length > 0) {
-    exampleBlocks.push({
+    blocks.push({
       label: "<negative_examples>",
       text: block("negative_examples", negatives.join("\n")),
     });
   }
+  return blocks;
+}
 
-  const blocks: PromptBlock[] = [];
-  // 長文資料は必ず先頭。指示より前に置くのが定石。
-  if (documents) blocks.push({ label: "<documents>", text: documents });
-  if (!draft.longContextMode) blocks.push(...directives);
-  blocks.push(...sectionsFor(draft, "before"));
-  blocks.push(...exampleBlocks);
-  if (draft.longContextMode) blocks.push(...directives);
-  blocks.push(...sectionsFor(draft, "after"));
+function buildCustom(draft: PromptDraft, section: Section): PromptBlock[] {
+  const node = draft.customSections.find((entry) => entry.id === section.id);
+  if (!node) return [];
+  const text = buildNode(node);
+  if (!text) return [];
+  return [{ label: `<${sanitizeTag(node.tag)}>`, text }];
+}
 
-  // 中身が何もない状態で実入力の枠だけを出しても意味がないので、その場合は付けない。
-  if (draft.includeRealInput && blocks.length > 0) {
-    blocks.push({
-      label: "<input>",
-      text: `${REAL_INPUT_LEAD}\n\n${block("input", REAL_INPUT_PLACEHOLDER)}`,
-    });
+/** そのカード1枚が user ターンに出すブロック。出すものが無ければ空配列。 */
+function blocksFor(draft: PromptDraft, section: Section): PromptBlock[] {
+  switch (section.kind) {
+    // role は system、outputSchema は output_config へ入るので user には出ない。
+    case "role":
+    case "outputSchema":
+      return [];
+    case "instruction": {
+      const instruction = draft.instruction.trim();
+      if (!instruction) return [];
+      return [{ label: "<instructions>", text: block("instructions", instruction) }];
+    }
+    case "constraints":
+      return buildConstraints(draft);
+    case "documents":
+      return buildDocuments(draft);
+    case "examples":
+      return buildExamples(draft);
+    case "custom":
+      return buildCustom(draft, section);
+    case "realInput":
+      return [
+        {
+          label: "<input>",
+          text: `${REAL_INPUT_LEAD}\n\n${block("input", REAL_INPUT_PLACEHOLDER)}`,
+        },
+      ];
   }
+}
+
+/**
+ * 下書きから XML 構造化プロンプトを組み立てる。
+ * カードの並び順がそのまま user ターンの並び順になる。
+ * 空のフィールドはタグごと省略し、中身が何もなければ user は空文字列になる。
+ */
+export function buildPrompt(draft: PromptDraft): BuiltPrompt {
+  const blocks: PromptBlock[] = [];
+  for (const section of draft.sections) {
+    blocks.push(...blocksFor(draft, section));
+  }
+
+  // 実入力の枠だけが残っても意味がないので、他に何も無ければ落とす。
+  const meaningful = blocks.filter((entry) => entry.label !== "<input>");
+  const finalBlocks = meaningful.length > 0 ? blocks : [];
 
   return {
     system: draft.role.trim(),
-    user: blocks.map((entry) => entry.text).join("\n\n"),
-    blocks,
+    user: finalBlocks.map((entry) => entry.text).join("\n\n"),
+    blocks: finalBlocks,
   };
 }
 
@@ -249,7 +262,6 @@ export function countText(text: string): { chars: number; words: number | null }
   if (compact.length === 0) return { chars, words: null };
 
   // 仮名・漢字が1文字でもあれば日本語とみなし、単語数は出さない。
-  // 割合で判定すると境界が読めないので、含むか否かで割り切る。
   if (JAPANESE.test(compact)) return { chars, words: null };
 
   const words = text.match(/[A-Za-z0-9][A-Za-z0-9'’.\-]*/g)?.length ?? 0;

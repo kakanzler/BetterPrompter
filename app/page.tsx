@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import AutoTextarea from "@/components/AutoTextarea";
 import ConstraintList from "@/components/ConstraintList";
+import ContextMenu, { type MenuPosition } from "@/components/ContextMenu";
 import CustomNodeEditor from "@/components/CustomNodeEditor";
 import DocumentCard from "@/components/DocumentCard";
 import ExampleCard from "@/components/ExampleCard";
@@ -10,10 +11,12 @@ import LintPanel from "@/components/LintPanel";
 import MigrationNotice from "@/components/MigrationNotice";
 import OutputPanel from "@/components/OutputPanel";
 import OutputSchemaEditor from "@/components/OutputSchemaEditor";
+import SectionCard from "@/components/SectionCard";
 import VariablePanel from "@/components/VariablePanel";
-import { buildPrompt, type BuiltPrompt } from "@/lib/buildPrompt";
+import { buildPrompt, sanitizeTag, type BuiltPrompt } from "@/lib/buildPrompt";
 import { lintDraft } from "@/lib/lint";
 import { buildOutputConfig } from "@/lib/outputConfig";
+import { applyRecommended, canAdd, makeSection, RECOMMENDED_ORDER, specFor } from "@/lib/sections";
 import { appendChild, moveNode, patchNode, removeNode } from "@/lib/tree";
 import {
   emptyDocument,
@@ -23,6 +26,8 @@ import {
   type DocumentEntry,
   type Effort,
   type Example,
+  type Section,
+  type SectionKind,
 } from "@/lib/types";
 import { normalizeDraft, useDraftStorage } from "@/lib/useDraftStorage";
 import { applyVariables, extractVariables } from "@/lib/variables";
@@ -43,24 +48,32 @@ function swap<T>(items: T[], index: number, direction: -1 | 1): T[] {
   return next;
 }
 
+/** from の要素を抜き取り、to の位置へ差し込む。 */
+function reorder<T>(items: T[], from: number, to: number): T[] {
+  if (from === to || from < 0 || to < 0 || from >= items.length || to >= items.length) return items;
+  const next = [...items];
+  const [moved] = next.splice(from, 1);
+  next.splice(to, 0, moved);
+  return next;
+}
+
 export default function Page() {
   const [draft, setDraft, droppedPrefill] = useDraftStorage();
   // プレビューは表示モードなので下書きには保存しない。
   const [previewEnabled, setPreviewEnabled] = useState(false);
+  const [menu, setMenu] = useState<MenuPosition | null>(null);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const variables = useMemo(() => extractVariables(draft), [draft]);
   const findings = useMemo(() => lintDraft(draft), [draft]);
   const outputConfig = useMemo(() => buildOutputConfig(draft), [draft]);
 
-  // 何も生成されていないうちは、助言も変数欄も出さない。
-  const hasOutput = useMemo(() => {
-    const raw = buildPrompt(draft);
-    return Boolean(raw.system || raw.user || buildOutputConfig(draft));
-  }, [draft]);
+  const raw = useMemo(() => buildPrompt(draft), [draft]);
+  const hasOutput = Boolean(raw.system || raw.user || outputConfig);
 
   const built = useMemo<BuiltPrompt>(() => {
-    const raw = buildPrompt(draft);
     if (!previewEnabled) return raw;
     const values = draft.variableValues;
     return {
@@ -71,39 +84,84 @@ export default function Page() {
         text: applyVariables(block.text, values),
       })),
     };
-  }, [draft, previewEnabled]);
+  }, [raw, previewEnabled, draft.variableValues]);
+
+  // ---- セクション（カード）操作 ----
+
+  function patchSection(id: string, patch: Partial<Section>) {
+    setDraft((current) => ({
+      ...current,
+      sections: current.sections.map((section) =>
+        section.id === id ? { ...section, ...patch } : section,
+      ),
+    }));
+  }
+
+  function moveSection(id: string, direction: -1 | 1) {
+    setDraft((current) => ({
+      ...current,
+      sections: swap(
+        current.sections,
+        current.sections.findIndex((section) => section.id === id),
+        direction,
+      ),
+    }));
+  }
+
+  function dropSection(targetId: string) {
+    const sourceId = dragId;
+    setDragId(null);
+    setOverId(null);
+    if (!sourceId || sourceId === targetId) return;
+    setDraft((current) => ({
+      ...current,
+      sections: reorder(
+        current.sections,
+        current.sections.findIndex((section) => section.id === sourceId),
+        current.sections.findIndex((section) => section.id === targetId),
+      ),
+    }));
+  }
+
+  function deleteSection(section: Section) {
+    setDraft((current) => ({
+      ...current,
+      sections: current.sections.filter((entry) => entry.id !== section.id),
+      // custom カードは対応するノードも一緒に消す。他の種類はデータを残し、
+      // 同じカードを足し直したときに書いた内容が戻るようにする。
+      customSections:
+        section.kind === "custom"
+          ? removeNode(current.customSections, section.id)
+          : current.customSections,
+    }));
+  }
+
+  function addSection(kind: SectionKind) {
+    setDraft((current) => {
+      if (!canAdd(current.sections, kind)) return current;
+      if (kind === "custom") {
+        const id = newId();
+        return {
+          ...current,
+          sections: [...current.sections, makeSection("custom", id)],
+          customSections: [...current.customSections, emptyNode(id)],
+        };
+      }
+      return { ...current, sections: [...current.sections, makeSection(kind, kind)] };
+    });
+  }
+
+  function addRecommended() {
+    setDraft((current) => ({ ...current, sections: applyRecommended(current.sections, newId) }));
+  }
+
+  // ---- カードの中身 ----
 
   function updateExample(id: string, patch: Partial<Example>) {
     setDraft((current) => ({
       ...current,
       examples: current.examples.map((example) =>
         example.id === id ? { ...example, ...patch } : example,
-      ),
-    }));
-  }
-
-  function addExample() {
-    setDraft((current) => ({
-      ...current,
-      examples: [...current.examples, emptyExample(newId())],
-    }));
-  }
-
-  function deleteExample(id: string) {
-    // example は使わない選択もあるので、0件まで消せる。
-    setDraft((current) => ({
-      ...current,
-      examples: current.examples.filter((example) => example.id !== id),
-    }));
-  }
-
-  function moveExample(id: string, direction: -1 | 1) {
-    setDraft((current) => ({
-      ...current,
-      examples: swap(
-        current.examples,
-        current.examples.findIndex((example) => example.id === id),
-        direction,
       ),
     }));
   }
@@ -117,31 +175,6 @@ export default function Page() {
     }));
   }
 
-  function addDocument() {
-    setDraft((current) => ({
-      ...current,
-      documents: [...current.documents, emptyDocument(newId())],
-    }));
-  }
-
-  function deleteDocument(id: string) {
-    setDraft((current) => ({
-      ...current,
-      documents: current.documents.filter((document) => document.id !== id),
-    }));
-  }
-
-  function moveDocument(id: string, direction: -1 | 1) {
-    setDraft((current) => ({
-      ...current,
-      documents: swap(
-        current.documents,
-        current.documents.findIndex((document) => document.id === id),
-        direction,
-      ),
-    }));
-  }
-
   function updateNode(id: string, patch: Partial<CustomNode>) {
     setDraft((current) => ({
       ...current,
@@ -149,38 +182,8 @@ export default function Page() {
     }));
   }
 
-  function deleteNode(id: string) {
-    setDraft((current) => ({
-      ...current,
-      customSections: removeNode(current.customSections, id),
-    }));
-  }
-
-  function moveNodeBy(id: string, direction: -1 | 1) {
-    setDraft((current) => ({
-      ...current,
-      customSections: moveNode(current.customSections, id, direction),
-    }));
-  }
-
-  function addChildNode(id: string) {
-    setDraft((current) => ({
-      ...current,
-      customSections: appendChild(current.customSections, id, emptyNode(newId())),
-    }));
-  }
-
-  function addSection() {
-    setDraft((current) => ({
-      ...current,
-      customSections: [...current.customSections, emptyNode(newId(), "before")],
-    }));
-  }
-
   function exportJson() {
-    const blob = new Blob([JSON.stringify(draft, null, 2)], {
-      type: "application/json",
-    });
+    const blob = new Blob([JSON.stringify(draft, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
@@ -198,6 +201,181 @@ export default function Page() {
       window.alert("JSON を読み込めませんでした。");
     }
   }
+
+  function renderBody(section: Section): ReactNode {
+    switch (section.kind) {
+      case "role":
+        return (
+          <AutoTextarea
+            value={draft.role}
+            rows={2}
+            placeholder="モデルに与える役割（例: あなたは経験豊富な編集者です）"
+            onChange={(role) => setDraft((current) => ({ ...current, role }))}
+          />
+        );
+      case "instruction":
+        return (
+          <AutoTextarea
+            value={draft.instruction}
+            rows={3}
+            placeholder="モデルにやってほしいことを書く（例: 記事を3行で要約してください）"
+            onChange={(instruction) => setDraft((current) => ({ ...current, instruction }))}
+          />
+        );
+      case "constraints":
+        return (
+          <ConstraintList
+            constraints={draft.constraints}
+            onChange={(constraints) => setDraft((current) => ({ ...current, constraints }))}
+          />
+        );
+      case "documents":
+        return (
+          <>
+            {draft.documents.map((document, index) => (
+              <DocumentCard
+                key={document.id}
+                document={document}
+                index={index}
+                total={draft.documents.length}
+                onChange={(patch) => updateDocument(document.id, patch)}
+                onDelete={() =>
+                  setDraft((current) => ({
+                    ...current,
+                    documents: current.documents.filter((entry) => entry.id !== document.id),
+                  }))
+                }
+                onMove={(direction) =>
+                  setDraft((current) => ({
+                    ...current,
+                    documents: swap(current.documents, index, direction),
+                  }))
+                }
+              />
+            ))}
+            <button
+              type="button"
+              className="add-example"
+              onClick={() =>
+                setDraft((current) => ({
+                  ...current,
+                  documents: [...current.documents, emptyDocument(newId())],
+                }))
+              }
+            >
+              ＋ add document
+            </button>
+          </>
+        );
+      case "examples":
+        return (
+          <>
+            {draft.examples.map((example, index) => (
+              <ExampleCard
+                key={example.id}
+                example={example}
+                index={index}
+                total={draft.examples.length}
+                onChange={(patch) => updateExample(example.id, patch)}
+                onDelete={() =>
+                  setDraft((current) => ({
+                    ...current,
+                    examples: current.examples.filter((entry) => entry.id !== example.id),
+                  }))
+                }
+                onMove={(direction) =>
+                  setDraft((current) => ({
+                    ...current,
+                    examples: swap(current.examples, index, direction),
+                  }))
+                }
+              />
+            ))}
+            <button
+              type="button"
+              className="add-example"
+              onClick={() =>
+                setDraft((current) => ({
+                  ...current,
+                  examples: [...current.examples, emptyExample(newId())],
+                }))
+              }
+            >
+              ＋ add example
+            </button>
+          </>
+        );
+      case "custom": {
+        const node = draft.customSections.find((entry) => entry.id === section.id);
+        if (!node) return null;
+        return (
+          <CustomNodeEditor
+            node={node}
+            depth={0}
+            index={0}
+            total={1}
+            onChange={updateNode}
+            onDelete={(id) =>
+              setDraft((current) => ({
+                ...current,
+                customSections: removeNode(current.customSections, id),
+              }))
+            }
+            onMove={(id, direction) =>
+              setDraft((current) => ({
+                ...current,
+                customSections: moveNode(current.customSections, id, direction),
+              }))
+            }
+            onAddChild={(id) =>
+              setDraft((current) => ({
+                ...current,
+                customSections: appendChild(current.customSections, id, emptyNode(newId())),
+              }))
+            }
+          />
+        );
+      }
+      case "outputSchema":
+        return (
+          <OutputSchemaEditor
+            schema={draft.outputSchema}
+            effort={draft.effort}
+            onChangeSchema={(outputSchema) => setDraft((current) => ({ ...current, outputSchema }))}
+            onChangeEffort={(effort: Effort) => setDraft((current) => ({ ...current, effort }))}
+          />
+        );
+      case "realInput":
+        return (
+          <p className="real-input-note">
+            ここに <code>{"{{INPUT}}"}</code> の枠が入ります。使うときに実際の入力へ差し替えてください。
+          </p>
+        );
+    }
+  }
+
+  function titleFor(section: Section): string | undefined {
+    if (section.kind !== "custom") return undefined;
+    const node = draft.customSections.find((entry) => entry.id === section.id);
+    const tag = sanitizeTag(node?.tag ?? "");
+    return tag ? `<${tag}>` : "custom tag";
+  }
+
+  // custom は何枚でも置けるので、無効化するのは既にある単数カードだけ。
+  const disabledKinds = useMemo(
+    () =>
+      new Set(
+        draft.sections
+          .map((section) => section.kind)
+          .filter((kind) => kind !== "custom"),
+      ),
+    [draft.sections],
+  );
+
+  const recommendAvailable = useMemo(
+    () => RECOMMENDED_ORDER.some((kind) => canAdd(draft.sections, kind)),
+    [draft.sections],
+  );
 
   return (
     <main className="page">
@@ -222,7 +400,6 @@ export default function Page() {
             onChange={(event) => {
               const file = event.target.files?.[0];
               if (file) void importJson(file);
-              // 同じファイルを続けて選べるように値をリセットする。
               event.target.value = "";
             }}
           />
@@ -232,169 +409,79 @@ export default function Page() {
       {droppedPrefill && <MigrationNotice droppedPrefill={droppedPrefill} />}
 
       <div className="layout">
-        <div className="pane-input">
-          <AutoTextarea
-            label="Role / System"
-            value={draft.role}
-            rows={2}
-            placeholder="モデルに与える役割（例: あなたは経験豊富な編集者です）"
-            onChange={(role) => setDraft((current) => ({ ...current, role }))}
-          />
+        <div
+          className="pane pane-input"
+          onContextMenu={(event) => {
+            event.preventDefault();
+            setMenu({ x: event.clientX, y: event.clientY });
+          }}
+        >
+          <p className="pane-hint">右クリックでカードを追加 / ⠿ をドラッグで並べ替え</p>
 
-          <AutoTextarea
-            label="Instruction"
-            value={draft.instruction}
-            rows={3}
-            placeholder="モデルにやってほしいことを書く（例: 記事を3行で要約してください）"
-            onChange={(instruction) => setDraft((current) => ({ ...current, instruction }))}
-          />
+          {draft.sections.map((section, index) => (
+            <SectionCard
+              key={section.id}
+              spec={specFor(section.kind)}
+              title={titleFor(section)}
+              collapsed={section.collapsed === true}
+              index={index}
+              total={draft.sections.length}
+              dragging={dragId === section.id}
+              dropBefore={overId === section.id && dragId !== null && dragId !== section.id}
+              onToggleCollapse={() => patchSection(section.id, { collapsed: !section.collapsed })}
+              onDelete={() => deleteSection(section)}
+              onMove={(direction) => moveSection(section.id, direction)}
+              onDragStart={() => setDragId(section.id)}
+              onDragEnd={() => {
+                setDragId(null);
+                setOverId(null);
+              }}
+              onDragOver={() => setOverId(section.id)}
+              onDrop={() => dropSection(section.id)}
+            >
+              {renderBody(section)}
+            </SectionCard>
+          ))}
 
-          <div className="section-head">
-            <h2 className="section-label">constraints</h2>
-            <span className="section-note">守ってほしい条件を箇条書きで</span>
-          </div>
-          <ConstraintList
-            constraints={draft.constraints}
-            onChange={(constraints) => setDraft((current) => ({ ...current, constraints }))}
-          />
-
-          <div className="section-head">
-            <h2 className="section-label">documents</h2>
-            <span className="section-note">長文資料。プロンプトの先頭に置かれます</span>
-          </div>
-
-          {draft.documents.length > 0 && (
-            <div className="document-list">
-              {draft.documents.map((document, index) => (
-                <DocumentCard
-                  key={document.id}
-                  document={document}
-                  index={index}
-                  total={draft.documents.length}
-                  onChange={(patch) => updateDocument(document.id, patch)}
-                  onDelete={() => deleteDocument(document.id)}
-                  onMove={(direction) => moveDocument(document.id, direction)}
-                />
-              ))}
-            </div>
+          {draft.sections.length === 0 && (
+            <p className="pane-empty">
+              カードがありません。右クリックして <strong>recommend</strong> を選ぶと、
+              よく使う構成が一度に揃います。
+            </p>
           )}
-
-          <button type="button" className="add-example" onClick={addDocument}>
-            ＋ add document
-          </button>
-
-          <label className="toggle">
-            <input
-              type="checkbox"
-              checked={draft.longContextMode}
-              onChange={(event) =>
-                setDraft((current) => ({ ...current, longContextMode: event.target.checked }))
-              }
-            />
-            long-context モード — 資料が長いとき、指示を example の後ろ（末尾寄り）へ移す
-          </label>
-
-          <div className="section-head">
-            <h2 className="section-label">example</h2>
-            <span className="section-note">良い例と悪い例を切り替えられます</span>
-          </div>
-
-          {draft.examples.length > 0 && (
-            <div className="example-list">
-              {draft.examples.map((example, index) => (
-                <ExampleCard
-                  key={example.id}
-                  example={example}
-                  index={index}
-                  total={draft.examples.length}
-                  onChange={(patch) => updateExample(example.id, patch)}
-                  onDelete={() => deleteExample(example.id)}
-                  onMove={(direction) => moveExample(example.id, direction)}
-                />
-              ))}
-            </div>
-          )}
-
-          <button type="button" className="add-example" onClick={addExample}>
-            ＋ add example
-          </button>
-
-          <div className="section-head">
-            <h2 className="section-label">custom tags</h2>
-            <span className="section-note">任意の XML タグをいくらでもネストできます</span>
-          </div>
-
-          {draft.customSections.length > 0 && (
-            <div className="custom-list">
-              {draft.customSections.map((section, index) => (
-                <CustomNodeEditor
-                  key={section.id}
-                  node={section}
-                  depth={0}
-                  index={index}
-                  total={draft.customSections.length}
-                  onChange={updateNode}
-                  onDelete={deleteNode}
-                  onMove={moveNodeBy}
-                  onAddChild={addChildNode}
-                />
-              ))}
-            </div>
-          )}
-
-          <button type="button" className="add-example" onClick={addSection}>
-            ＋ add custom tag
-          </button>
-
-          <label className="toggle">
-            <input
-              type="checkbox"
-              checked={draft.includeRealInput}
-              onChange={(event) =>
-                setDraft((current) => ({ ...current, includeRealInput: event.target.checked }))
-              }
-            />
-            末尾に実入力の枠（<code>{"{{INPUT}}"}</code>）を付ける
-          </label>
 
           {hasOutput && variables.length > 0 && (
-            <>
-              <div className="section-head">
-                <h2 className="section-label">variables</h2>
-                <span className="section-note">{`{{名前}} と書くとここに現れます`}</span>
-              </div>
-              <VariablePanel
-                variables={variables}
-                values={draft.variableValues}
-                previewEnabled={previewEnabled}
-                onTogglePreview={setPreviewEnabled}
-                onChangeValue={(name, value) =>
-                  setDraft((current) => ({
-                    ...current,
-                    variableValues: { ...current.variableValues, [name]: value },
-                  }))
-                }
-              />
-            </>
+            <VariablePanel
+              variables={variables}
+              values={draft.variableValues}
+              previewEnabled={previewEnabled}
+              onTogglePreview={setPreviewEnabled}
+              onChangeValue={(name, value) =>
+                setDraft((current) => ({
+                  ...current,
+                  variableValues: { ...current.variableValues, [name]: value },
+                }))
+              }
+            />
           )}
-
-          <div className="section-head">
-            <h2 className="section-label">Output schema</h2>
-            <span className="section-note">structured outputs で出力の形を確実に固定します</span>
-          </div>
-          <OutputSchemaEditor
-            schema={draft.outputSchema}
-            effort={draft.effort}
-            onChangeSchema={(outputSchema) => setDraft((current) => ({ ...current, outputSchema }))}
-            onChangeEffort={(effort: Effort) => setDraft((current) => ({ ...current, effort }))}
-          />
         </div>
 
-        <aside className="pane-output">
+        <aside className="pane pane-output">
           <OutputPanel built={built} outputConfig={outputConfig} />
           {hasOutput && <LintPanel findings={findings} />}
         </aside>
       </div>
+
+      {menu && (
+        <ContextMenu
+          position={menu}
+          disabledKinds={disabledKinds}
+          recommendAvailable={recommendAvailable}
+          onAdd={addSection}
+          onRecommend={addRecommended}
+          onClose={() => setMenu(null)}
+        />
+      )}
     </main>
   );
 }

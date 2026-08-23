@@ -1,18 +1,31 @@
 "use client";
 
 import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
-import {
-  defaultDraft,
-  type CustomNode,
-  type DocumentEntry,
-  type Effort,
-  type Example,
-  type PromptDraft,
+import { defaultDraft, makeSection } from "./sections";
+import type {
+  CustomNode,
+  DocumentEntry,
+  Effort,
+  Example,
+  PromptDraft,
+  Section,
+  SectionKind,
 } from "./types";
+
+const STORAGE_KEY = "betterprompter:draft";
 
 const EFFORTS: Effort[] = ["low", "medium", "high", "xhigh", "max"];
 
-const STORAGE_KEY = "betterprompter:draft";
+const SECTION_KINDS: SectionKind[] = [
+  "role",
+  "instruction",
+  "constraints",
+  "documents",
+  "examples",
+  "outputSchema",
+  "realInput",
+  "custom",
+];
 
 /** ネストが深すぎる JSON でスタックを溢れさせないための上限。 */
 const MAX_DEPTH = 20;
@@ -40,14 +53,13 @@ function normalizeNodes(value: unknown, depth: number, path: string): CustomNode
   if (!Array.isArray(value) || depth > MAX_DEPTH) return [];
   return value.map((item, index) => {
     const entry = asRecord(item);
-    const id = `${path}-${index}`;
+    const id = typeof entry.id === "string" && entry.id ? entry.id : `${path}-${index}`;
     return {
-      id: typeof entry.id === "string" && entry.id ? entry.id : id,
+      id,
       tag: asString(entry.tag),
       content: asString(entry.content),
       children: normalizeNodes(entry.children, depth + 1, id),
       collapsed: entry.collapsed === true,
-      placement: entry.placement === "after" ? "after" : "before",
     };
   });
 }
@@ -84,6 +96,62 @@ function normalizeExamples(value: unknown): Example[] {
   });
 }
 
+/** 保存済みの sections をそのまま読む。使えるものが無ければ null を返して合成に回す。 */
+function readSections(value: unknown, nodes: CustomNode[]): Section[] | null {
+  if (!Array.isArray(value)) return null;
+
+  const nodeIds = new Set(nodes.map((node) => node.id));
+  const seen = new Set<string>();
+  const sections: Section[] = [];
+
+  for (const item of value) {
+    const entry = asRecord(item);
+    const kind = entry.kind;
+    const id = entry.id;
+    if (typeof kind !== "string" || typeof id !== "string" || !id) continue;
+    if (!SECTION_KINDS.includes(kind as SectionKind)) continue;
+    // custom カードは対応するノードが無ければ幽霊になるので落とす。
+    if (kind === "custom" && !nodeIds.has(id)) continue;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    sections.push({ id, kind: kind as SectionKind, collapsed: entry.collapsed === true });
+  }
+
+  return sections.length > 0 ? sections : null;
+}
+
+/**
+ * sections を持たない古い下書きから、**それまでと同じ出力になる並び**を組み立てる。
+ * 旧仕様は「documents は常に先頭 → 指示まわり → custom(before) → examples →
+ * custom(after) → 実入力」で、longContextMode が true のときだけ指示まわりが examples の後ろ。
+ */
+function migrateSections(raw: Record<string, unknown>, nodes: CustomNode[]): Section[] {
+  const filled = (value: unknown) => Array.isArray(value) && value.length > 0;
+  const rawNodes = Array.isArray(raw.customSections) ? raw.customSections : [];
+  const isAfter = (index: number) => asRecord(rawNodes[index]).placement === "after";
+
+  const before: Section[] = [];
+  const after: Section[] = [];
+  nodes.forEach((node, index) => {
+    (isAfter(index) ? after : before).push(makeSection("custom", node.id));
+  });
+
+  const directives: Section[] = [makeSection("instruction", "instruction")];
+  if (filled(raw.constraints)) directives.push(makeSection("constraints", "constraints"));
+
+  const sections: Section[] = [makeSection("role", "role")];
+  if (filled(raw.documents)) sections.push(makeSection("documents", "documents"));
+  if (raw.longContextMode !== true) sections.push(...directives);
+  sections.push(...before);
+  if (filled(raw.examples)) sections.push(makeSection("examples", "examples"));
+  if (raw.longContextMode === true) sections.push(...directives);
+  sections.push(...after);
+  if (asString(raw.outputSchema).trim()) sections.push(makeSection("outputSchema", "outputSchema"));
+  if (raw.includeRealInput !== false) sections.push(makeSection("realInput", "realInput"));
+
+  return sections;
+}
+
 export type NormalizeResult = {
   draft: PromptDraft;
   /**
@@ -96,24 +164,22 @@ export type NormalizeResult = {
 /**
  * 外から来た JSON（localStorage / インポートファイル）を PromptDraft に整える。
  * 形が違えば null を返し、呼び出し側は既定値のまま続行する。
- * 新しいキーを持たない古い下書きも、既定値で埋めてそのまま読めるようにしてある。
  */
 export function normalizeDraft(value: unknown): NormalizeResult | null {
   if (typeof value !== "object" || value === null) return null;
   const raw = value as Record<string, unknown>;
 
   const prefill = asString(raw.prefill).trim();
+  const customSections = normalizeNodes(raw.customSections, 0, "section");
 
   const draft: PromptDraft = {
+    sections: readSections(raw.sections, customSections) ?? migrateSections(raw, customSections),
     role: asString(raw.role),
     instruction: asString(raw.instruction),
     constraints: asStringArray(raw.constraints),
     documents: normalizeDocuments(raw.documents),
-    longContextMode: raw.longContextMode === true,
-    // example は使うとは限らないので0件のまま通す。
     examples: normalizeExamples(raw.examples),
-    customSections: normalizeNodes(raw.customSections, 0, "section"),
-    includeRealInput: raw.includeRealInput !== false,
+    customSections,
     outputSchema: asString(raw.outputSchema),
     effort: EFFORTS.includes(raw.effort as Effort) ? (raw.effort as Effort) : "",
     variableValues: asStringMap(raw.variableValues),

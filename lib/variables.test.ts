@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { applyVariables, extractVariables } from "./variables";
-import { defaultDraft, emptyDocument, emptyExample } from "./types";
+import { emptyDocument, emptyExample } from "./types";
+import { defaultDraft } from "./sections";
 import type { PromptDraft } from "./types";
 
 function draft(overrides: Partial<PromptDraft> = {}): PromptDraft {
-  return { ...defaultDraft(), includeRealInput: false, ...overrides };
+  return { ...defaultDraft(), sections: [], ...overrides };
 }
 
 describe("extractVariables", () => {
@@ -52,8 +53,9 @@ describe("extractVariables", () => {
     ).toEqual(["B", "A"]);
   });
 
-  it("実入力の枠が ON なら INPUT を含める", () => {
-    expect(extractVariables(draft({ includeRealInput: true }))).toEqual(["INPUT"]);
+  it("実入力の枠カードがあれば INPUT を含める", () => {
+    const withCard = draft({ sections: [{ id: "realInput", kind: "realInput" }] });
+    expect(extractVariables(withCard)).toEqual(["INPUT"]);
   });
 
   it("英数字とアンダースコア以外は変数として拾わない", () => {
