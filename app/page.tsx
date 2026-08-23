@@ -108,6 +108,18 @@ export default function Page() {
     }));
   }
 
+  /**
+   * ドラッグ中のカードが対象カードの上下どちらへ着地するか。
+   * reorder は「抜いてから差し込む」ので、下へ運ぶと対象の後ろに入る。
+   * 目印もそれに合わせないと見た目と結果が食い違う。
+   */
+  function dropPositionFor(targetId: string): "before" | "after" | null {
+    if (!dragId || overId !== targetId || dragId === targetId) return null;
+    const from = draft.sections.findIndex((section) => section.id === dragId);
+    const to = draft.sections.findIndex((section) => section.id === targetId);
+    return from < to ? "after" : "before";
+  }
+
   function dropSection(targetId: string) {
     const sourceId = dragId;
     setDragId(null);
@@ -152,7 +164,7 @@ export default function Page() {
   }
 
   function addRecommended() {
-    setDraft((current) => ({ ...current, sections: applyRecommended(current.sections, newId) }));
+    setDraft((current) => ({ ...current, sections: applyRecommended(current.sections) }));
   }
 
   // ---- カードの中身 ----
@@ -412,6 +424,9 @@ export default function Page() {
         <div
           className="pane pane-input"
           onContextMenu={(event) => {
+            // 入力欄の上ではブラウザ標準のメニュー（貼り付け・スペルチェック）を残す。
+            const target = event.target as HTMLElement;
+            if (target.closest("input, textarea, select, [contenteditable='true']")) return;
             event.preventDefault();
             setMenu({ x: event.clientX, y: event.clientY });
           }}
@@ -427,7 +442,7 @@ export default function Page() {
               index={index}
               total={draft.sections.length}
               dragging={dragId === section.id}
-              dropBefore={overId === section.id && dragId !== null && dragId !== section.id}
+              dropPosition={dropPositionFor(section.id)}
               onToggleCollapse={() => patchSection(section.id, { collapsed: !section.collapsed })}
               onDelete={() => deleteSection(section)}
               onMove={(direction) => moveSection(section.id, direction)}

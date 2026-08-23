@@ -1126,17 +1126,25 @@ textarea::placeholder {
   opacity: 0.45;
 }
 
-/* 差し込み位置を上端のラインで示す。 */
-.section-card-drop::before {
+/* 差し込み位置をラインで示す。着地するのが上か下かで出す位置を変える。 */
+.section-card-drop-before::before,
+.section-card-drop-after::after {
   content: "";
   position: absolute;
   left: 8px;
   right: 8px;
-  top: -7px;
   height: 2px;
   border-radius: 2px;
   background: hsl(var(--hue1) 90% 70%);
   box-shadow: 0 0 10px 1px hsl(var(--hue1) 90% 60% / 0.9);
+}
+
+.section-card-drop-before::before {
+  top: -7px;
+}
+
+.section-card-drop-after::after {
+  bottom: -7px;
 }
 
 .real-input-note {

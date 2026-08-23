@@ -1,7 +1,9 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type { SectionSpec } from "@/lib/sections";
+
+export type DropPosition = "before" | "after";
 
 type Props = {
   spec: SectionSpec;
@@ -11,7 +13,8 @@ type Props = {
   index: number;
   total: number;
   dragging: boolean;
-  dropBefore: boolean;
+  /** ドロップ先の目印を上下どちらに出すか。対象でなければ null。 */
+  dropPosition: DropPosition | null;
   onToggleCollapse: () => void;
   onDelete: () => void;
   onMove: (direction: -1 | 1) => void;
@@ -29,7 +32,7 @@ export default function SectionCard({
   index,
   total,
   dragging,
-  dropBefore,
+  dropPosition,
   onToggleCollapse,
   onDelete,
   onMove,
@@ -39,6 +42,12 @@ export default function SectionCard({
   onDrop,
   children,
 }: Props) {
+  /**
+   * ハンドルを掴んでいる間だけ draggable にする。
+   * カード全体を常に draggable にすると、配下の input / textarea で
+   * マウスによるテキスト選択ができなくなる。
+   */
+  const [grabbed, setGrabbed] = useState(false);
   const label = title ?? spec.label;
 
   return (
@@ -46,19 +55,22 @@ export default function SectionCard({
       className={[
         "section-card",
         dragging ? "section-card-dragging" : "",
-        dropBefore ? "section-card-drop" : "",
+        dropPosition ? `section-card-drop-${dropPosition}` : "",
       ]
         .filter(Boolean)
         .join(" ")}
       aria-label={label}
-      draggable
+      draggable={grabbed}
       onDragStart={(event) => {
         // Firefox はデータが無いとドラッグを開始しない。
         event.dataTransfer.setData("text/plain", label);
         event.dataTransfer.effectAllowed = "move";
         onDragStart();
       }}
-      onDragEnd={onDragEnd}
+      onDragEnd={() => {
+        setGrabbed(false);
+        onDragEnd();
+      }}
       onDragOver={(event) => {
         event.preventDefault();
         event.dataTransfer.dropEffect = "move";
@@ -66,11 +78,18 @@ export default function SectionCard({
       }}
       onDrop={(event) => {
         event.preventDefault();
+        setGrabbed(false);
         onDrop();
       }}
     >
       <header className="section-card-head">
-        <span className="drag-handle" aria-hidden="true" title="ドラッグで並べ替え">
+        <span
+          className="drag-handle"
+          title="ドラッグで並べ替え"
+          aria-hidden="true"
+          onMouseDown={() => setGrabbed(true)}
+          onMouseUp={() => setGrabbed(false)}
+        >
           ⠿
         </span>
 

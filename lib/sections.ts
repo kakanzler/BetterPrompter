@@ -139,23 +139,29 @@ export function canAdd(sections: Section[], kind: SectionKind): boolean {
 }
 
 /**
- * recommend で足りないカードを補う。既にあるものはそのまま、
- * 無いものだけを RECOMMENDED_ORDER の位置関係を保って挿入する。
+ * recommend で足りないカードを補う。
+ * **既にあるカードは動かさず**、無いものだけを推奨順の位置へ挿し込む。
+ * custom は推奨順に無いので、挿入位置の判断材料にしない
+ * （ユーザーが置いた場所のまま残る）。
  */
-export function applyRecommended(sections: Section[], newId: () => string): Section[] {
-  const missing = RECOMMENDED_ORDER.filter((kind) => canAdd(sections, kind));
-  if (missing.length === 0) return sections;
+export function applyRecommended(sections: Section[]): Section[] {
+  const next = [...sections];
 
-  // 推奨順の通し番号で並べ替えられるよう、既存カードにも番号を振る。
-  const rank = (kind: SectionKind) => {
-    const index = RECOMMENDED_ORDER.indexOf(kind);
-    // 推奨順に無いもの（custom）は末尾側へ寄せるが、相対順は保つ。
-    return index < 0 ? RECOMMENDED_ORDER.length : index;
-  };
+  for (const kind of RECOMMENDED_ORDER) {
+    if (!canAdd(next, kind)) continue;
+    const rank = RECOMMENDED_ORDER.indexOf(kind);
 
-  const merged = [...sections, ...missing.map((kind) => makeSection(kind, newId()))];
-  return merged
-    .map((section, index) => ({ section, index }))
-    .sort((a, b) => rank(a.section.kind) - rank(b.section.kind) || a.index - b.index)
-    .map((entry) => entry.section);
+    // 「自分より後ろに来るべき最初のカード」の手前に入れる。
+    let insertAt = next.length;
+    for (let i = 0; i < next.length; i += 1) {
+      const other = RECOMMENDED_ORDER.indexOf(next[i].kind);
+      if (other >= 0 && other > rank) {
+        insertAt = i;
+        break;
+      }
+    }
+    next.splice(insertAt, 0, makeSection(kind, kind));
+  }
+
+  return next;
 }
