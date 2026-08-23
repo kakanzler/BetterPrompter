@@ -2,17 +2,19 @@
 
 import { useMemo, useRef } from "react";
 import AutoTextarea from "@/components/AutoTextarea";
+import CustomNodeEditor from "@/components/CustomNodeEditor";
 import ExampleCard from "@/components/ExampleCard";
 import OutputPanel from "@/components/OutputPanel";
 import { buildPrompt } from "@/lib/buildPrompt";
-import { emptyExample, type Example } from "@/lib/types";
+import { appendChild, moveNode, patchNode, removeNode } from "@/lib/tree";
+import { emptyExample, emptyNode, type CustomNode, type Example } from "@/lib/types";
 import { normalizeDraft, useDraftStorage } from "@/lib/useDraftStorage";
 
 function newId(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
   }
-  return `ex-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  return `node-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 export default function Page() {
@@ -57,6 +59,41 @@ export default function Page() {
       [examples[index], examples[target]] = [examples[target], examples[index]];
       return { ...current, examples };
     });
+  }
+
+  function updateNode(id: string, patch: Partial<CustomNode>) {
+    setDraft((current) => ({
+      ...current,
+      customSections: patchNode(current.customSections, id, patch),
+    }));
+  }
+
+  function deleteNode(id: string) {
+    setDraft((current) => ({
+      ...current,
+      customSections: removeNode(current.customSections, id),
+    }));
+  }
+
+  function moveNodeBy(id: string, direction: -1 | 1) {
+    setDraft((current) => ({
+      ...current,
+      customSections: moveNode(current.customSections, id, direction),
+    }));
+  }
+
+  function addChildNode(id: string) {
+    setDraft((current) => ({
+      ...current,
+      customSections: appendChild(current.customSections, id, emptyNode(newId())),
+    }));
+  }
+
+  function addSection() {
+    setDraft((current) => ({
+      ...current,
+      customSections: [...current.customSections, emptyNode(newId(), "before")],
+    }));
   }
 
   function exportJson() {
@@ -139,6 +176,33 @@ export default function Page() {
 
       <button type="button" className="add-example" onClick={addExample}>
         ＋ add example
+      </button>
+
+      <div className="section-head">
+        <h2 className="section-label">custom tags</h2>
+        <span className="section-note">任意の XML タグをいくらでもネストできます</span>
+      </div>
+
+      {draft.customSections.length > 0 && (
+        <div className="custom-list">
+          {draft.customSections.map((section, index) => (
+            <CustomNodeEditor
+              key={section.id}
+              node={section}
+              depth={0}
+              index={index}
+              total={draft.customSections.length}
+              onChange={updateNode}
+              onDelete={deleteNode}
+              onMove={moveNodeBy}
+              onAddChild={addChildNode}
+            />
+          ))}
+        </div>
+      )}
+
+      <button type="button" className="add-example" onClick={addSection}>
+        ＋ add custom tag
       </button>
 
       <label className="toggle">

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { estimateTokens } from "@/lib/buildPrompt";
+import { countText, estimateTokens } from "@/lib/buildPrompt";
 
 type Props = {
   prompt: string;
@@ -16,10 +16,10 @@ export default function OutputPanel({ prompt }: Props) {
     return () => clearTimeout(timer);
   }, [copied]);
 
-  const stats = useMemo(
-    () => ({ chars: prompt.length, tokens: estimateTokens(prompt) }),
-    [prompt],
-  );
+  const stats = useMemo(() => {
+    const { chars, words } = countText(prompt);
+    return { chars, words, tokens: estimateTokens(prompt) };
+  }, [prompt]);
 
   async function handleCopy() {
     if (!prompt) return;
@@ -47,7 +47,9 @@ export default function OutputPanel({ prompt }: Props) {
         <div className="section-head-actions">
           {prompt && (
             <span className="stats">
-              {stats.chars.toLocaleString()} 文字 / 概算 {stats.tokens.toLocaleString()} トークン
+              {stats.chars.toLocaleString()} 文字
+              {stats.words !== null && ` / ${stats.words.toLocaleString()} ${stats.words === 1 ? "word" : "words"}`}
+              {` / 概算 ${stats.tokens.toLocaleString()} トークン`}
             </span>
           )}
           <button

@@ -1,12 +1,35 @@
 "use client";
 
 import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
-import { defaultDraft, type Example, type PromptDraft } from "./types";
+import { defaultDraft, type CustomNode, type Example, type PromptDraft } from "./types";
 
 const STORAGE_KEY = "betterprompter:draft";
 
+/** ネストが深すぎる JSON でスタックを溢れさせないための上限。 */
+const MAX_DEPTH = 20;
+
 function asString(value: unknown): string {
   return typeof value === "string" ? value : "";
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
+}
+
+function normalizeNodes(value: unknown, depth: number, path: string): CustomNode[] {
+  if (!Array.isArray(value) || depth > MAX_DEPTH) return [];
+  return value.map((item, index) => {
+    const entry = asRecord(item);
+    const id = `${path}-${index}`;
+    return {
+      id: typeof entry.id === "string" && entry.id ? entry.id : id,
+      tag: asString(entry.tag),
+      content: asString(entry.content),
+      children: normalizeNodes(entry.children, depth + 1, id),
+      collapsed: entry.collapsed === true,
+      placement: entry.placement === "after" ? "after" : "before",
+    };
+  });
 }
 
 /**
@@ -19,10 +42,7 @@ export function normalizeDraft(value: unknown): PromptDraft | null {
 
   const examples: Example[] = Array.isArray(raw.examples)
     ? raw.examples.map((item, index) => {
-        const entry = (typeof item === "object" && item !== null ? item : {}) as Record<
-          string,
-          unknown
-        >;
+        const entry = asRecord(item);
         return {
           id: typeof entry.id === "string" && entry.id ? entry.id : `restored-${index}`,
           input: asString(entry.input),
@@ -37,6 +57,7 @@ export function normalizeDraft(value: unknown): PromptDraft | null {
     instruction: asString(raw.instruction),
     // Example が0件だと追加ボタンしかない空画面になるため、必ず1件は残す。
     examples: examples.length > 0 ? examples : defaultDraft().examples,
+    customSections: normalizeNodes(raw.customSections, 0, "section"),
     includeRealInput: raw.includeRealInput !== false,
   };
 }

@@ -7,9 +7,24 @@ export type Example = {
   collapsed?: boolean;
 };
 
+/** カスタムセクションを examples の前に置くか後ろに置くか。トップレベルのみ意味を持つ。 */
+export type Placement = "before" | "after";
+
+/** 任意の XML タグ。children を持つことでいくらでもネストできる。 */
+export type CustomNode = {
+  id: string;
+  tag: string;
+  content: string;
+  children: CustomNode[];
+  collapsed?: boolean;
+  /** トップレベルのセクションでのみ参照される。 */
+  placement?: Placement;
+};
+
 export type PromptDraft = {
   instruction: string;
   examples: Example[];
+  customSections: CustomNode[];
   includeRealInput: boolean;
 };
 
@@ -17,6 +32,10 @@ export const DEFAULT_EXAMPLE_ID = "default";
 
 export function emptyExample(id: string): Example {
   return { id, input: "", thinking: "", idealOutput: "", collapsed: false };
+}
+
+export function emptyNode(id: string, placement?: Placement): CustomNode {
+  return { id, tag: "", content: "", children: [], collapsed: false, placement };
 }
 
 /**
@@ -27,6 +46,7 @@ export function defaultDraft(): PromptDraft {
   return {
     instruction: "",
     examples: [emptyExample(DEFAULT_EXAMPLE_ID)],
+    customSections: [],
     includeRealInput: true,
   };
 }

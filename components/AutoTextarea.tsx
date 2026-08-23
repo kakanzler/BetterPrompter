@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useId, useLayoutEffect, useRef } from "react";
-import { hasTagCollision } from "@/lib/buildPrompt";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef } from "react";
+import { countText, hasTagCollision } from "@/lib/buildPrompt";
 
 type Props = {
-  label: string;
+  label?: string;
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
@@ -31,7 +31,7 @@ export default function AutoTextarea({
     el.style.height = `${el.scrollHeight}px`;
   }, [value]);
 
-  // フォント読み込み後に行の高さが変わることがあるため、初回だけ再計算する。
+  // 横幅が変わると折り返し行数も変わるため、リサイズでも測り直す。
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -44,18 +44,31 @@ export default function AutoTextarea({
   }, []);
 
   const collision = hasTagCollision(value);
+  const { chars, words } = useMemo(() => countText(value), [value]);
 
   return (
     <div className="field">
       <div className="field-head">
-        <label className={variant === "onCard" ? "tag-label" : "section-label"} htmlFor={id}>
-          {label}
-        </label>
-        {collision && (
-          <span className="warn" role="status">
-            ⚠ 閉じタグが含まれています — 生成結果の構造が壊れます
-          </span>
+        {label ? (
+          <label className={variant === "onCard" ? "tag-label" : "section-label"} htmlFor={id}>
+            {label}
+          </label>
+        ) : (
+          <span />
         )}
+        <span className="field-meta">
+          {collision && (
+            <span className="warn" role="status">
+              ⚠ 閉じタグが含まれています — 生成結果の構造が壊れます
+            </span>
+          )}
+          {chars > 0 && (
+            <span className="counter">
+              {chars.toLocaleString()} 文字
+              {words !== null && ` / ${words.toLocaleString()} ${words === 1 ? "word" : "words"}`}
+            </span>
+          )}
+        </span>
       </div>
       <textarea
         id={id}
