@@ -119,6 +119,140 @@ describe("normalizeDraft の防御", () => {
   });
 });
 
+describe("styleTokens の正規化", () => {
+  it("キーを持たない旧下書きは既定値で埋める", () => {
+    const restored = normalizeDraft(LEGACY_DRAFT);
+    expect(restored?.draft.styleTokens).toEqual([]);
+    expect(restored?.draft.styleTagName).toBe("style_tokens");
+    expect(restored?.draft.styleOutputMode).toBe("customProperties");
+  });
+
+  it("配列でなければ空配列に落とす", () => {
+    expect(normalizeDraft({ styleTokens: "配列ではない" })?.draft.styleTokens).toEqual([]);
+  });
+
+  it("空白だけのタグ名は既定へ、知らない出力モードは customProperties へ", () => {
+    const restored = normalizeDraft({ styleTagName: "   ", styleOutputMode: "inline" });
+    expect(restored?.draft.styleTagName).toBe("style_tokens");
+    expect(restored?.draft.styleOutputMode).toBe("customProperties");
+  });
+
+  it("既知の値はそのまま通す", () => {
+    const restored = normalizeDraft({ styleTagName: "design_tokens", styleOutputMode: "declarations" });
+    expect(restored?.draft.styleTagName).toBe("design_tokens");
+    expect(restored?.draft.styleOutputMode).toBe("declarations");
+  });
+
+  it("知らない type と apply は既定へ落とす", () => {
+    const restored = normalizeDraft({
+      styleTokens: [{ id: "s", name: "brand", type: "conic", apply: "fill" }],
+    });
+    expect(restored?.draft.styleTokens[0].type).toBe("solid");
+    expect(restored?.draft.styleTokens[0].apply).toBe("background");
+    expect(restored?.draft.styleTokens[0].value).toEqual({ color: { r: 0, g: 0, b: 0, a: 1 } });
+  });
+
+  it("範囲外の角度・位置・色をクランプする", () => {
+    const restored = normalizeDraft({
+      styleTokens: [
+        {
+          id: "s",
+          name: "brand",
+          type: "linear",
+          value: {
+            angle: 720,
+            stops: [
+              { id: "a", position: -10, color: { r: 999, g: 87, b: 51, a: 1 } },
+              { id: "b", position: 500, color: { r: 51, g: 193, b: 255, a: 3 } },
+            ],
+          },
+        },
+      ],
+    });
+    const value = restored?.draft.styleTokens[0].value as { angle: number; stops: unknown[] };
+    expect(value.angle).toBe(360);
+    expect(value.stops).toEqual([
+      { id: "a", position: 0, color: { r: 255, g: 87, b: 51, a: 1 } },
+      { id: "b", position: 100, color: { r: 51, g: 193, b: 255, a: 1 } },
+    ]);
+  });
+
+  it("停止点が1点しか無ければ2点に補う", () => {
+    const restored = normalizeDraft({
+      styleTokens: [
+        {
+          id: "s",
+          name: "brand",
+          type: "linear",
+          value: { stops: [{ id: "a", position: 30, color: { r: 51, g: 193, b: 255, a: 1 } }] },
+        },
+      ],
+    });
+    const value = restored?.draft.styleTokens[0].value as {
+      angle: number;
+      stops: Array<{ id: string; position: number }>;
+    };
+    // 角度が壊れていれば既定の 90 度。
+    expect(value.angle).toBe(90);
+    expect(value.stops).toHaveLength(2);
+    expect(value.stops[1]).toEqual({
+      id: "s-stop-1",
+      position: 100,
+      color: { r: 51, g: 193, b: 255, a: 1 },
+    });
+  });
+
+  it("radial は形を circle / ellipse に丸め、停止点を揃える", () => {
+    const restored = normalizeDraft({
+      styleTokens: [{ id: "s", name: "brand", type: "radial", value: { shape: "square" } }],
+    });
+    const value = restored?.draft.styleTokens[0].value as { shape: string; stops: unknown[] };
+    expect(value.shape).toBe("circle");
+    expect(value.stops).toHaveLength(2);
+  });
+
+  it("id が無ければ添字から補う", () => {
+    const restored = normalizeDraft({ styleTokens: [{ name: "brand" }, { name: "accent" }] });
+    expect(restored?.draft.styleTokens.map((token) => token.id)).toEqual(["style-0", "style-1"]);
+  });
+
+  it("空の description はキーごと持たない", () => {
+    const restored = normalizeDraft({
+      styleTokens: [{ id: "s", name: "brand", description: "  " }, { id: "t", description: " 主要色 " }],
+    });
+    expect(restored?.draft.styleTokens[0]).not.toHaveProperty("description");
+    expect(restored?.draft.styleTokens[1].description).toBe("主要色");
+  });
+
+  it("自分の出力を再正規化しても変わらない（冪等）", () => {
+    const messy = {
+      styleTokens: [
+        { name: "brand", type: "conic", apply: "fill", description: " 主要色 " },
+        {
+          id: "g",
+          name: "hero",
+          type: "linear",
+          value: { angle: 720, stops: [{ position: -10, color: { r: 999 } }] },
+        },
+      ],
+    };
+    const once = normalizeDraft(messy)!.draft;
+    const twice = normalizeDraft(once)!.draft;
+    expect(twice.styleTokens).toEqual(once.styleTokens);
+  });
+
+  it("保存済みの styleTokens カードは生き残る", () => {
+    const restored = normalizeDraft({
+      instruction: "要約する",
+      sections: [
+        { id: "instruction", kind: "instruction" },
+        { id: "styleTokens", kind: "styleTokens" },
+      ],
+    });
+    expect(restored?.draft.sections.map((s) => s.kind)).toEqual(["instruction", "styleTokens"]);
+  });
+});
+
 describe("sections への移行", () => {
   /** 旧仕様の並びは documents → 指示まわり → custom(before) → examples → custom(after) → 実入力。 */
   const OLD_FULL = {

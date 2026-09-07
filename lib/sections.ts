@@ -68,6 +68,14 @@ export const SECTION_SPECS: SectionSpec[] = [
     ordered: true,
   },
   {
+    kind: "styleTokens",
+    label: "CSS style",
+    hint: "色・グラデーションを選んで CSS で渡す",
+    glyph: "❖",
+    unique: true,
+    ordered: true,
+  },
+  {
     kind: "realInput",
     label: "実入力の枠",
     hint: "{{INPUT}} の差し込み位置",
@@ -129,6 +137,9 @@ export function defaultDraft(): PromptDraft {
     outputSchema: "",
     effort: "",
     variableValues: {},
+    styleTokens: [],
+    styleTagName: "style_tokens",
+    styleOutputMode: "customProperties",
   };
 }
 

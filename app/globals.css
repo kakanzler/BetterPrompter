@@ -1446,3 +1446,446 @@ textarea:focus,
   position: relative;
   flex: none;
 }
+
+/* ---------- CSS style カード ---------- */
+
+.style-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.style-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.style-card-head .kind-switch {
+  margin-left: auto;
+}
+
+/* 行はドラッグしない下位カード。schema-editor と同じ厚みで揃える。 */
+.style-token-row {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--card);
+  border-radius: var(--radius-card);
+  padding: 16px 24px 18px;
+}
+
+.style-token-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.style-token-actions {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.style-token-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.style-token-fields {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.style-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.style-field-wide {
+  flex: 1;
+  min-width: 180px;
+}
+
+.style-field-label {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+/* 入力の見た目は既存の .constraint-input と揃える（あちらの列挙に足さず独立させる）。 */
+.style-input,
+.style-name-input,
+.style-select {
+  background:
+    linear-gradient(hsl(0 0% 100% / 0.06), hsl(0 0% 100% / 0) 42%),
+    var(--input-bg);
+  color: var(--input-fg);
+  border: 1px solid var(--edge);
+  border-radius: var(--radius-input);
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  padding: 6px 10px;
+  transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease);
+}
+
+.style-name-input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  padding: 7px 12px;
+}
+
+.style-select {
+  cursor: pointer;
+}
+
+.style-input-narrow {
+  width: 6ch;
+  text-align: right;
+  font-family: var(--font-mono);
+}
+
+.style-input::placeholder,
+.style-name-input::placeholder {
+  color: var(--placeholder);
+}
+
+.style-input:focus,
+.style-name-input:focus,
+.style-select:focus {
+  outline: none;
+  border-color: hsl(198 95% 62% / 0.7);
+  box-shadow:
+    0 0 0 1px hsl(198 95% 62% / 0.35),
+    0 0 18px -2px var(--accent-soft);
+}
+
+.style-card input[type="range"] {
+  accent-color: var(--accent);
+}
+
+.style-decl {
+  display: block;
+  background: var(--output-bg);
+  border: 1px solid var(--edge);
+  border-radius: var(--radius-input);
+  color: var(--output-fg);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  line-height: 1.6;
+  padding: 8px 14px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* ---------- カラーピッカー ---------- */
+
+.color-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cp-sv {
+  position: relative;
+  width: 100%;
+  height: 148px;
+  border: 1px solid var(--edge);
+  border-radius: var(--radius-input);
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.cp-sv-dragging {
+  border-color: var(--edge-strong);
+}
+
+.cp-thumb {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+}
+
+.cp-sliders {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cp-hue,
+.cp-alpha {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: 14px;
+  border: 1px solid var(--edge);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.cp-hue {
+  background-image: linear-gradient(
+    to right,
+    #ff0000,
+    #ffff00,
+    #00ff00,
+    #00ffff,
+    #0000ff,
+    #ff00ff,
+    #ff0000
+  );
+}
+
+.cp-hue::-webkit-slider-thumb,
+.cp-alpha::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  background: transparent;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55);
+  cursor: pointer;
+}
+
+.cp-hue::-moz-range-thumb,
+.cp-alpha::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  background: transparent;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55);
+  cursor: pointer;
+}
+
+.cp-fields {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.cp-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 7ch;
+}
+
+.cp-field input {
+  width: 100%;
+  font-family: var(--font-mono);
+  text-align: right;
+  padding: 6px 8px;
+}
+
+.cp-field-hex {
+  width: 12ch;
+}
+
+.cp-field-hex input {
+  text-align: left;
+}
+
+.cp-field-label {
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+/* ---------- グラデーション ---------- */
+
+.gradient-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.gradient-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.gradient-caption {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.gradient-angle-range {
+  flex: 1;
+  min-width: 120px;
+  accent-color: var(--accent);
+}
+
+.gradient-unit {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.gradient-hint {
+  font-size: 0.72rem;
+  color: var(--muted);
+  opacity: 0.8;
+}
+
+.gradient-bar {
+  position: relative;
+  height: 30px;
+  border: 1px solid var(--edge);
+  border-radius: 999px;
+  cursor: copy;
+  touch-action: none;
+}
+
+.gradient-stop {
+  position: absolute;
+  top: 50%;
+  width: 16px;
+  height: 16px;
+  margin: -8px 0 0 -8px;
+  padding: 0;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55);
+  cursor: grab;
+  touch-action: none;
+}
+
+.gradient-stop-on {
+  border-color: var(--accent);
+  box-shadow: 0 0 12px -2px var(--accent-soft);
+}
+
+.gradient-stop-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.gradient-stop-item {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.gradient-stop-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.gradient-swatch {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--edge);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.gradient-swatch:hover {
+  border-color: var(--edge-strong);
+}
+
+.gradient-stop-value {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-right: auto;
+}
+
+/* ---------- プレビュー ---------- */
+
+.style-preview {
+  background: var(--card);
+  border-radius: var(--radius-card);
+  padding: 16px 24px 18px;
+}
+
+.style-preview-panel {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+}
+
+.style-preview-surface {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-input);
+  padding: 10px 12px;
+}
+
+.style-preview-surface-active {
+  border-color: var(--edge-strong);
+  box-shadow: 0 0 18px -8px var(--accent-soft);
+}
+
+.style-preview-caption {
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+.style-preview-text h4 {
+  margin: 0 0 4px;
+  font-size: 0.95rem;
+  font-weight: 400;
+}
+
+.style-preview-text p {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.7;
+}
+
+.style-preview-box {
+  min-height: 56px;
+  border-radius: var(--radius-input);
+}
+
+.style-preview-fill {
+  border: 1px solid var(--edge);
+}
+
+.style-preview-border-inner {
+  height: 100%;
+  min-height: 50px;
+  background: var(--input-bg);
+  border-radius: 9px;
+}
+
+.style-preview-button {
+  align-self: flex-start;
+  border: none;
+  border-radius: 999px;
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  padding: 8px 18px;
+  cursor: pointer;
+}
+
+@media (max-width: 600px) {
+  .style-token-row,
+  .style-preview {
+    padding: 12px 16px 18px;
+    border-radius: 18px;
+  }
+}

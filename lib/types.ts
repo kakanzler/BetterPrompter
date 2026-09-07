@@ -43,7 +43,43 @@ export type SectionKind =
   | "examples"
   | "outputSchema"
   | "realInput"
-  | "custom";
+  | "custom"
+  | "styleTokens";
+
+/** r,g,b は整数 0–255、a は 0–1。 */
+export type Rgba = { r: number; g: number; b: number; a: number };
+
+/** グラデーションの色停止点。position は 0–100（%）。 */
+export type GradientStop = { id: string; color: Rgba; position: number };
+
+export type StyleTokenType = "solid" | "linear" | "radial";
+
+/** プレビューの当て先であり、宣言モードで出力する CSS プロパティ名でもある。 */
+export type StyleApply = "color" | "background" | "border-color";
+
+export type SolidValue = { color: Rgba };
+/** angle は 0–360（deg）。 */
+export type LinearValue = { angle: number; stops: GradientStop[] };
+export type RadialValue = { shape: "circle" | "ellipse"; stops: GradientStop[] };
+/** 兄弟の StyleToken.type で判別する。 */
+export type StyleTokenValue = SolidValue | LinearValue | RadialValue;
+
+export type StyleToken = {
+  id: string;
+  /** CSS 識別子へ sanitize される（例 "brand-primary"）。 */
+  name: string;
+  type: StyleTokenType;
+  /** 形は必ず type と一致する。 */
+  value: StyleTokenValue;
+  /** プレビューの当て先 & 宣言モードの出力プロパティ（永続）。 */
+  apply: StyleApply;
+  /** 任意の一行説明。出力に CSS コメントで添える。 */
+  description?: string;
+  collapsed?: boolean;
+};
+
+/** 生成プロンプトへ出す CSS の書き方。 */
+export type StyleOutputMode = "customProperties" | "declarations";
 
 /**
  * 左ペインに並ぶカード1枚。並び順がそのまま出力順になる。
@@ -65,6 +101,12 @@ export type PromptDraft = {
   effort: Effort;
   /** 変数のテスト値。プレビュー用で、下書き本体は書き換えない。 */
   variableValues: Record<string, string>;
+  /** CSS スタイルトークン。並び順がそのまま出力ブロック内の行順になる。 */
+  styleTokens: StyleToken[];
+  /** スタイルトークンを包む XML タグ名。既定 "style_tokens"。 */
+  styleTagName: string;
+  /** スタイルトークンの出力形式。既定 "customProperties"。 */
+  styleOutputMode: StyleOutputMode;
 };
 
 export function emptyExample(id: string): Example {
@@ -85,4 +127,20 @@ export function emptyNode(id: string): CustomNode {
 
 export function emptyDocument(id: string): DocumentEntry {
   return { id, source: "", content: "", collapsed: false };
+}
+
+/** グラデーションの色停止点。色を省いたときは不透明の黒。 */
+export function emptyGradientStop(id: string, position: number, color?: Rgba): GradientStop {
+  return { id, position, color: color ?? { r: 0, g: 0, b: 0, a: 1 } };
+}
+
+export function emptyStyleToken(id: string): StyleToken {
+  return {
+    id,
+    name: "",
+    type: "solid",
+    value: { color: { r: 255, g: 87, b: 51, a: 1 } },
+    apply: "background",
+    collapsed: false,
+  };
 }

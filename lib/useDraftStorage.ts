@@ -1,15 +1,22 @@
 "use client";
 
 import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
+import { clamp, normalizeRgba } from "./color";
 import { defaultDraft, makeSection } from "./sections";
+import { emptyGradientStop } from "./types";
 import type {
   CustomNode,
   DocumentEntry,
   Effort,
   Example,
+  GradientStop,
   PromptDraft,
   Section,
   SectionKind,
+  StyleApply,
+  StyleToken,
+  StyleTokenType,
+  StyleTokenValue,
 } from "./types";
 
 const STORAGE_KEY = "betterprompter:draft";
@@ -25,7 +32,12 @@ const SECTION_KINDS: SectionKind[] = [
   "outputSchema",
   "realInput",
   "custom",
+  "styleTokens",
 ];
+
+const STYLE_TOKEN_TYPES: StyleTokenType[] = ["solid", "linear", "radial"];
+
+const STYLE_APPLIES: StyleApply[] = ["color", "background", "border-color"];
 
 /** ネストが深すぎる JSON でスタックを溢れさせないための上限。 */
 const MAX_DEPTH = 20;
@@ -36,6 +48,12 @@ function asString(value: unknown): string {
 
 function asRecord(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
+}
+
+/** 数値として使える値だけを範囲内に収める。壊れていれば fallback。 */
+function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
+  return clamp(value, min, max);
 }
 
 function asStringArray(value: unknown): string[] {
@@ -74,6 +92,79 @@ function normalizeDocuments(value: unknown): DocumentEntry[] {
       content: asString(entry.content),
       collapsed: entry.collapsed === true,
     };
+  });
+}
+
+/**
+ * グラデーションの色停止点。グラデとして成立するよう必ず2点以上に揃える。
+ * 足りない分は 0% / 100% に補い、色は直前の停止点から引き継ぐ。
+ */
+function normalizeStops(value: unknown, tokenId: string): GradientStop[] {
+  const list = Array.isArray(value) ? value : [];
+  const stops: GradientStop[] = list.map((item, index) => {
+    const entry = asRecord(item);
+    return {
+      id: typeof entry.id === "string" && entry.id ? entry.id : `${tokenId}-stop-${index}`,
+      color: normalizeRgba(entry.color),
+      position: clampNumber(entry.position, 0, 100, 0),
+    };
+  });
+
+  while (stops.length < 2) {
+    const index = stops.length;
+    const position = index === 0 ? 0 : 100;
+    stops.push(emptyGradientStop(`${tokenId}-stop-${index}`, position, stops[index - 1]?.color));
+  }
+
+  return stops;
+}
+
+/** type に対応する形の value を組み立てる（食い違ったデータは型どおりに作り直す）。 */
+function normalizeStyleValue(
+  type: StyleTokenType,
+  value: unknown,
+  tokenId: string,
+): StyleTokenValue {
+  const entry = asRecord(value);
+  if (type === "linear") {
+    return {
+      angle: clampNumber(entry.angle, 0, 360, 90),
+      stops: normalizeStops(entry.stops, tokenId),
+    };
+  }
+  if (type === "radial") {
+    return {
+      shape: entry.shape === "ellipse" ? "ellipse" : "circle",
+      stops: normalizeStops(entry.stops, tokenId),
+    };
+  }
+  return { color: normalizeRgba(entry.color) };
+}
+
+/** CSS スタイルトークン。自分の出力を再正規化しても変わらない（冪等）。 */
+function normalizeStyleTokens(value: unknown): StyleToken[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((item, index) => {
+    const entry = asRecord(item);
+    const id = typeof entry.id === "string" && entry.id ? entry.id : `style-${index}`;
+    const type = STYLE_TOKEN_TYPES.includes(entry.type as StyleTokenType)
+      ? (entry.type as StyleTokenType)
+      : "solid";
+    const description = asString(entry.description).trim();
+
+    const token: StyleToken = {
+      id,
+      name: asString(entry.name),
+      type,
+      value: normalizeStyleValue(type, entry.value, id),
+      apply: STYLE_APPLIES.includes(entry.apply as StyleApply)
+        ? (entry.apply as StyleApply)
+        : "background",
+      collapsed: entry.collapsed === true,
+    };
+    // 空の説明はキーごと持たない（省略可能なフィールドなので往復で増やさない）。
+    if (description) token.description = description;
+    return token;
   });
 }
 
@@ -183,6 +274,9 @@ export function normalizeDraft(value: unknown): NormalizeResult | null {
     outputSchema: asString(raw.outputSchema),
     effort: EFFORTS.includes(raw.effort as Effort) ? (raw.effort as Effort) : "",
     variableValues: asStringMap(raw.variableValues),
+    styleTokens: normalizeStyleTokens(raw.styleTokens),
+    styleTagName: asString(raw.styleTagName).trim() || "style_tokens",
+    styleOutputMode: raw.styleOutputMode === "declarations" ? "declarations" : "customProperties",
   };
 
   return prefill ? { draft, droppedPrefill: prefill } : { draft };

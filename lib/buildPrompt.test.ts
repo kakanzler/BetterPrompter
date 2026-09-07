@@ -7,9 +7,9 @@ import {
   hasTagCollision,
   sanitizeTag,
 } from "./buildPrompt";
-import { emptyDocument, emptyExample } from "./types";
+import { emptyDocument, emptyExample, emptyStyleToken } from "./types";
 import { defaultDraft, makeSection } from "./sections";
-import type { CustomNode, PromptDraft, Section } from "./types";
+import type { CustomNode, PromptDraft, Section, StyleToken } from "./types";
 
 // 既存テストは user ターンだけを見ているので、薄いラッパで包む。
 function buildPrompt(input: PromptDraft): string {
@@ -30,6 +30,7 @@ function draft(overrides: Partial<PromptDraft> = {}): PromptDraft {
   if (base.documents.length) sections.push(makeSection("documents", "documents"));
   if (base.instruction) sections.push(makeSection("instruction", "instruction"));
   if (base.constraints.length) sections.push(makeSection("constraints", "constraints"));
+  if (base.styleTokens.length) sections.push(makeSection("styleTokens", "styleTokens"));
   for (const node of base.customSections) sections.push(makeSection("custom", node.id));
   if (base.examples.length) sections.push(makeSection("examples", "examples"));
   if (base.outputSchema) sections.push(makeSection("outputSchema", "outputSchema"));
@@ -119,6 +120,10 @@ describe("hasTagCollision", () => {
   it("閉じタグが混ざっていれば true", () => {
     expect(hasTagCollision("前 </input> 後")).toBe(true);
     expect(hasTagCollision("</ideal_output>")).toBe(true);
+  });
+
+  it("スタイルトークンの閉じタグも拾う", () => {
+    expect(hasTagCollision("</style_tokens>")).toBe(true);
   });
 
   it("普通の文章なら false", () => {
@@ -482,6 +487,85 @@ describe("カード順が出力順になる", () => {
       }),
     );
     expect(result).toBe("<instructions>\n要約する\n</instructions>");
+  });
+});
+
+describe("CSS スタイルトークン", () => {
+  const token = (name: string, overrides: Partial<StyleToken> = {}): StyleToken => ({
+    ...emptyStyleToken(name || "empty"),
+    name,
+    ...overrides,
+  });
+
+  it("style カードがあれば style_tokens ブロックを出す", () => {
+    expect(buildPrompt(draft({ styleTokens: [token("brand primary")] }))).toBe(
+      "<style_tokens>\n--brand-primary: #ff5733;\n</style_tokens>",
+    );
+  });
+
+  it("トークンが0件ならブロックごと出ない", () => {
+    const result = buildPrompt(
+      draft({
+        instruction: "要約する",
+        sections: [makeSection("styleTokens", "styleTokens"), makeSection("instruction", "instruction")],
+      }),
+    );
+    expect(result).toBe("<instructions>\n要約する\n</instructions>");
+  });
+
+  it("名前が全て空ならブロックごと出ない", () => {
+    expect(buildPrompt(draft({ styleTokens: [token(""), token("@@@")] }))).toBe("");
+  });
+
+  it("囲みタグ名を尊重し、sanitizeTag を通す", () => {
+    const result = buildPrompt(
+      draft({ styleTokens: [token("brand primary")], styleTagName: "design tokens" }),
+    );
+    expect(result.startsWith("<design_tokens>")).toBe(true);
+    expect(result.endsWith("</design_tokens>")).toBe(true);
+  });
+
+  it("タグ名が使えない文字だけなら既定の style_tokens に戻す", () => {
+    const result = buildPrompt(draft({ styleTokens: [token("brand")], styleTagName: "///" }));
+    expect(result).toContain("<style_tokens>");
+  });
+
+  it("出力モードを切り替えると行の書き方が変わる", () => {
+    const tokens = [token("brand primary", { apply: "color" })];
+    expect(buildPrompt(draft({ styleTokens: tokens, styleOutputMode: "declarations" }))).toBe(
+      "<style_tokens>\ncolor: #ff5733;\n</style_tokens>",
+    );
+  });
+
+  it("アルファ付きの単色は rgba() で出す", () => {
+    const half = token("brand", { value: { color: { r: 51, g: 193, b: 255, a: 0.5 } } });
+    expect(buildPrompt(draft({ styleTokens: [half] }))).toContain(
+      "--brand: rgba(51, 193, 255, 0.5);",
+    );
+  });
+
+  it("カード順どおりの位置に出る", () => {
+    const shared = { instruction: "要約する", styleTokens: [token("brand")] };
+    const before = buildPrompt(
+      draft({
+        ...shared,
+        sections: [makeSection("styleTokens", "styleTokens"), makeSection("instruction", "instruction")],
+      }),
+    );
+    const after = buildPrompt(
+      draft({
+        ...shared,
+        sections: [makeSection("instruction", "instruction"), makeSection("styleTokens", "styleTokens")],
+      }),
+    );
+    expect(before.indexOf("<style_tokens>")).toBeLessThan(before.indexOf("<instructions>"));
+    expect(after.indexOf("<instructions>")).toBeLessThan(after.indexOf("<style_tokens>"));
+  });
+
+  it("blocks にラベル付きで載り、連結が user と一致する", () => {
+    const built = buildFull(draft({ instruction: "要約する", styleTokens: [token("brand")] }));
+    expect(built.blocks.map((b) => b.label)).toContain("<style_tokens>");
+    expect(built.blocks.map((b) => b.text).join("\n\n")).toBe(built.user);
   });
 });
 

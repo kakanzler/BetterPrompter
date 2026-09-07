@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { applyRecommended, canAdd, defaultDraft, makeSection, RECOMMENDED_ORDER } from "./sections";
+import {
+  applyRecommended,
+  canAdd,
+  defaultDraft,
+  makeSection,
+  RECOMMENDED_ORDER,
+  specFor,
+} from "./sections";
 import type { Section, SectionKind } from "./types";
 
 const kinds = (sections: Section[]) => sections.map((section) => section.kind);
@@ -15,6 +22,29 @@ describe("defaultDraft", () => {
 
   it("id は kind から決め打ちで、SSR と一致する", () => {
     expect(defaultDraft().sections).toEqual(defaultDraft().sections);
+  });
+});
+
+describe("CSS style カード", () => {
+  it("既定では中身が空で、囲みタグと出力モードは定数", () => {
+    const draft = defaultDraft();
+    expect(draft.styleTokens).toEqual([]);
+    expect(draft.styleTagName).toBe("style_tokens");
+    expect(draft.styleOutputMode).toBe("customProperties");
+  });
+
+  it("1枚だけ置ける並び順ありのカード", () => {
+    const spec = specFor("styleTokens");
+    expect(spec.unique).toBe(true);
+    expect(spec.ordered).toBe(true);
+    expect(canAdd(sections("styleTokens"), "styleTokens")).toBe(false);
+    expect(canAdd(sections("instruction"), "styleTokens")).toBe(true);
+  });
+
+  it("recommend では自動追加しない", () => {
+    expect(RECOMMENDED_ORDER).not.toContain("styleTokens");
+    expect(kinds(defaultDraft().sections)).not.toContain("styleTokens");
+    expect(kinds(applyRecommended([]))).not.toContain("styleTokens");
   });
 });
 
