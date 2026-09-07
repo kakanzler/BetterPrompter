@@ -514,6 +514,37 @@ textarea:focus,
   font-family: var(--font-mono);
 }
 
+/* タグ名が空のときに出す定型タグのチップ。 */
+.tag-presets {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tag-presets-label {
+  font-size: 0.72rem;
+  color: var(--muted);
+  opacity: 0.8;
+}
+
+.tag-preset {
+  background: var(--input-bg);
+  border: 1px solid var(--edge);
+  border-radius: 999px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  padding: 4px 12px;
+  cursor: pointer;
+  transition: border-color 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.tag-preset:hover {
+  color: var(--text);
+  border-color: hsl(198 95% 62% / 0.55);
+}
+
 
 .add-child {
   align-self: flex-start;

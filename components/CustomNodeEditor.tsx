@@ -1,8 +1,26 @@
 "use client";
 
 import AutoTextarea from "./AutoTextarea";
+import { useCollisionTags } from "./CollisionTags";
 import { sanitizeTag } from "@/lib/buildPrompt";
 import type { CustomNode } from "@/lib/types";
+
+/** タグ名が空のときに出す定型タグ。押すと base_1, base_2 ... と連番で入る。 */
+const TAG_PRESETS: { label: string; base: string }[] = [
+  { label: "Task", base: "task" },
+  { label: "reference", base: "reference" },
+  { label: "answer", base: "answer" },
+];
+
+/** 既存のタグ名を見て、その base の使用済み最大番号 + 1 を返す。 */
+function nextPresetTag(base: string, existing: string[]): string {
+  const pattern = new RegExp(`^${base}_(\\d+)$`);
+  const max = existing.reduce((acc, tag) => {
+    const match = tag.match(pattern);
+    return match ? Math.max(acc, Number(match[1])) : acc;
+  }, 0);
+  return `${base}_${max + 1}`;
+}
 
 type Props = {
   node: CustomNode;
@@ -27,6 +45,7 @@ export default function CustomNodeEditor({
 }: Props) {
   const collapsed = node.collapsed === true;
   const sanitized = sanitizeTag(node.tag);
+  const existingTags = useCollisionTags();
   const label = sanitized ? `<${sanitized}>` : "タグ名未入力";
   // 入力そのままでは XML に使えず書き換えられた場合だけ、実際に出るタグを見せる。
   const showsRewrite = sanitized !== "" && sanitized !== node.tag.trim();
@@ -99,6 +118,24 @@ export default function CustomNodeEditor({
 
       {!collapsed && (
         <div className="custom-node-body">
+          {depth === 0 && !sanitized && (
+            <div className="tag-presets">
+              <span className="tag-presets-label">プリセット</span>
+              {TAG_PRESETS.map((preset) => (
+                <button
+                  key={preset.base}
+                  type="button"
+                  className="tag-preset"
+                  onClick={() =>
+                    onChange(node.id, { tag: nextPresetTag(preset.base, existingTags) })
+                  }
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+          )}
+
           <AutoTextarea
             value={node.content}
             placeholder="このタグの中身（入れ子だけにするなら空でよい）"
