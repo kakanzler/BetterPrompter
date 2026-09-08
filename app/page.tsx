@@ -13,6 +13,7 @@ import MigrationNotice from "@/components/MigrationNotice";
 import OutputPanel from "@/components/OutputPanel";
 import OutputSchemaEditor from "@/components/OutputSchemaEditor";
 import SectionCard from "@/components/SectionCard";
+import StyleCard from "@/components/StyleCard";
 import Toast, { type ToastState } from "@/components/Toast";
 import VariablePanel from "@/components/VariablePanel";
 import { buildPrompt, customTagNames, sanitizeTag, type BuiltPrompt } from "@/lib/buildPrompt";
@@ -24,12 +25,14 @@ import {
   emptyDocument,
   emptyExample,
   emptyNode,
+  emptyStyleToken,
   type CustomNode,
   type DocumentEntry,
   type Effort,
   type Example,
   type Section,
   type SectionKind,
+  type StyleToken,
 } from "@/lib/types";
 import { normalizeDraft, useDraftStorage } from "@/lib/useDraftStorage";
 import { applyVariables, extractVariables } from "@/lib/variables";
@@ -72,7 +75,13 @@ export default function Page() {
   const variables = useMemo(() => extractVariables(draft), [draft]);
   const findings = useMemo(() => lintDraft(draft), [draft]);
   const outputConfig = useMemo(() => buildOutputConfig(draft), [draft]);
-  const collisionTags = useMemo(() => customTagNames(draft.customSections), [draft.customSections]);
+  const collisionTags = useMemo(() => {
+    const tags = customTagNames(draft.customSections);
+    // style カードがあるときだけ、その囲みタグ名も貼り付け事故の検出対象にする。
+    const hasStyle = draft.sections.some((section) => section.kind === "styleTokens");
+    const styleTag = hasStyle ? sanitizeTag(draft.styleTagName) : "";
+    return styleTag ? [...tags, styleTag] : tags;
+  }, [draft.customSections, draft.sections, draft.styleTagName]);
 
   const raw = useMemo(() => buildPrompt(draft), [draft]);
   const hasOutput = Boolean(raw.system || raw.user || outputConfig);
@@ -192,6 +201,15 @@ export default function Page() {
       ...current,
       documents: current.documents.map((document) =>
         document.id === id ? { ...document, ...patch } : document,
+      ),
+    }));
+  }
+
+  function updateStyleToken(id: string, patch: Partial<StyleToken>) {
+    setDraft((current) => ({
+      ...current,
+      styleTokens: current.styleTokens.map((token) =>
+        token.id === id ? { ...token, ...patch } : token,
       ),
     }));
   }
@@ -364,6 +382,44 @@ export default function Page() {
             effort={draft.effort}
             onChangeSchema={(outputSchema) => setDraft((current) => ({ ...current, outputSchema }))}
             onChangeEffort={(effort: Effort) => setDraft((current) => ({ ...current, effort }))}
+          />
+        );
+      case "styleTokens":
+        return (
+          <StyleCard
+            tokens={draft.styleTokens}
+            tagName={draft.styleTagName}
+            outputMode={draft.styleOutputMode}
+            newId={newId}
+            onUpdate={updateStyleToken}
+            onAdd={() =>
+              setDraft((current) => ({
+                ...current,
+                styleTokens: [...current.styleTokens, emptyStyleToken(newId())],
+              }))
+            }
+            onDelete={(id) =>
+              setDraft((current) => ({
+                ...current,
+                styleTokens: current.styleTokens.filter((token) => token.id !== id),
+              }))
+            }
+            onMove={(id, direction) =>
+              setDraft((current) => ({
+                ...current,
+                styleTokens: swap(
+                  current.styleTokens,
+                  current.styleTokens.findIndex((token) => token.id === id),
+                  direction,
+                ),
+              }))
+            }
+            onChangeTagName={(styleTagName) =>
+              setDraft((current) => ({ ...current, styleTagName }))
+            }
+            onChangeOutputMode={(styleOutputMode) =>
+              setDraft((current) => ({ ...current, styleOutputMode }))
+            }
           />
         );
       case "realInput":

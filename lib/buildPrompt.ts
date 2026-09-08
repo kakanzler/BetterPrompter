@@ -1,3 +1,4 @@
+import { buildStyleCss } from "./styleTokens";
 import type { CustomNode, Example, PromptDraft, Section } from "./types";
 
 /** 末尾に置く実入力ブロックの差し替え用プレースホルダ。 */
@@ -24,6 +25,7 @@ const CLOSING_TAGS = [
   "</documents>",
   "</document>",
   "</document_content>",
+  "</style_tokens>",
 ] as const;
 
 /** user ターンを構成する1ブロック。トークン内訳の表示にそのまま使う。 */
@@ -176,6 +178,15 @@ function buildExamples(draft: PromptDraft): PromptBlock[] {
   return blocks;
 }
 
+/** CSS スタイルトークン。使える行が1つも無ければブロックごと省く。 */
+function buildStyleTokens(draft: PromptDraft): PromptBlock[] {
+  const css = buildStyleCss(draft.styleTokens, draft.styleOutputMode);
+  if (!css) return [];
+  const tag = sanitizeTag(draft.styleTagName) || "style_tokens";
+  // CSS は行頭の位置に意味があるので、カスタムタグと違ってインデントしない。
+  return [{ label: `<${tag}>`, text: block(tag, css) }];
+}
+
 function buildCustom(draft: PromptDraft, section: Section): PromptBlock[] {
   const node = draft.customSections.find((entry) => entry.id === section.id);
   if (!node) return [];
@@ -202,6 +213,8 @@ function blocksFor(draft: PromptDraft, section: Section): PromptBlock[] {
       return buildDocuments(draft);
     case "examples":
       return buildExamples(draft);
+    case "styleTokens":
+      return buildStyleTokens(draft);
     case "custom":
       return buildCustom(draft, section);
     case "realInput":
